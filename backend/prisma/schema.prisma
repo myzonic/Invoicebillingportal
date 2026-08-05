@@ -1,0 +1,238 @@
+// Myzonic Finance & Billing Portal - database schema
+// PostgreSQL via Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ModuleName {
+  dashboard
+  clients
+  invoices
+  items
+  brands
+  merchants
+  users
+  roles
+  logs
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  SQUARE
+  MANUAL
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum LogAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  SEND
+  LOGIN
+  LOGOUT
+  PAYMENT
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  password     String
+  name         String
+  avatarUrl    String?
+  isActive     Boolean        @default(true)
+  roleId       String
+  role         Role           @relation(fields: [roleId], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([roleId])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module       ModuleName
+  canCreate    Boolean    @default(false)
+  canRead      Boolean    @default(false)
+  canUpdate    Boolean    @default(false)
+  canDelete    Boolean    @default(false)
+
+  @@unique([roleId, module])
+  @@index([module])
+}
+
+model Brand {
+  id         String   @id @default(cuid())
+  name       String
+  logoUrl    String?
+  currency   String   @default("USD")
+  email      String?
+  phone      String?
+  address    String?
+  pdfHeader  String?
+  pdfFooter  String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clients   Client[]
+  merchants Merchant[]
+  invoices  Invoice[]
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  brandId   String?
+  brand     Brand?   @relation(fields: [brandId], references: [id])
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices Invoice[]
+
+  @@index([brandId])
+}
+
+model Merchant {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  brandId   String?
+  brand     Brand?   @relation(fields: [brandId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandId])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  number          String        @unique
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id])
+  brandId         String?
+  brand           Brand?        @relation(fields: [brandId], references: [id])
+  items           Json          // array of { description, quantity, unitPrice, amount }
+  subtotal        Decimal       @db.Decimal(12, 2)
+  taxRate         Decimal       @default(0) @db.Decimal(5, 2)
+  taxAmount       Decimal       @default(0) @db.Decimal(12, 2)
+  discountAmount  Decimal       @default(0) @db.Decimal(12, 2)
+  total           Decimal       @db.Decimal(12, 2)
+  currency        String        @default("USD")
+  color           String?       // brand accent color shown on client-facing invoice/PDF
+  status          InvoiceStatus @default(DRAFT)
+  notes           String?
+  issueDate       DateTime
+  dueDate         DateTime?
+  sentAt          DateTime?
+  paidAt          DateTime?
+  squarePaymentLink String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  payments Payment[]
+  invoiceLogs InvoiceLog[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([number])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("USD")
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  reference     String?       // Square payment id or manual reference
+  capturedAt    DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([invoiceId])
+}
+
+model AuditLog {
+  id        String     @id @default(cuid())
+  userId    String?
+  userEmail String?
+  module    String
+  action    LogAction
+  details   Json?
+  ip        String?
+  createdAt DateTime   @default(now())
+
+  @@index([module])
+  @@index([createdAt])
+}
+
+model InvoiceLog {
+  id        String   @id @default(cuid())
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  toEmail   String
+  subject   String
+  status    String // "sent" | "failed"
+  error     String?
+  sentAt    DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+model InviteToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String?
+  roleId    String?
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value Json
+}

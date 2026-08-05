@@ -1,0 +1,59 @@
+# Myzonic Finance & Billing - production compose (Dokploy reference / local test).
+# On Dokploy you can either deploy the Dockerfile from your Git repo, or use this
+# compose (PostgreSQL service is also available as a native Dokploy service).
+#
+# Set the same environment variables in the Dokploy app/service UI.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: myzonic
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myzonic"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/myzonic?schema=public
+      API_URL: ${API_URL:-https://localhost}
+      CLIENT_URL: ${CLIENT_URL:-https://localhost}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@myzonic.com}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD}
+      INVITE_TOKEN: ${INVITE_TOKEN:?set INVITE_TOKEN}
+      SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT:-sandbox}
+      SQUARE_APP_ID: ${SQUARE_APP_ID:-}
+      SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:?set SQUARE_ACCESS_TOKEN}
+      SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:?set SQUARE_LOCATION_ID}
+      SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-"Myzonic Finance <billing@myzonic.com>"}
+      UPLOAD_DIR: uploads
+      MAX_UPLOAD_MB: "10"
+    volumes:
+      - uploads:/app/backend/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
