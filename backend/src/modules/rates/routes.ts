@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { ApiError } from "../../utils/ApiError";
 import { requireAuth } from "../../middleware/auth";
+import { requireAdmin } from "../../middleware/rbac";
 import { getRates, refreshLiveRates, setOverrides } from "../../services/rates";
 
 const router = Router();
@@ -16,6 +17,7 @@ router.get(
 
 router.post(
   "/refresh",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const result = await refreshLiveRates();
     if (!result.ok) throw new ApiError(502, result.error || "Could not refresh rates");
@@ -25,6 +27,7 @@ router.post(
 
 router.put(
   "/overrides",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const raw: unknown = (req.body as Record<string, unknown>)?.overrides ?? {};
     const input: Record<string, number | null> = {};

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../../lib/prisma";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
+import { requireAdmin } from "../../middleware/rbac";
 
 const router = Router();
 router.use(requireAuth);
@@ -20,6 +21,7 @@ router.get(
 
 router.put(
   "/",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     for (const key of Object.keys(req.body)) {
       if (!ALLOWED_KEYS.includes(key)) continue;

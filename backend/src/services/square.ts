@@ -146,7 +146,16 @@ export async function chargeInvoiceWithToken(
   sourceId: string,
   opts: { currency?: string; amount?: number; billing?: BillingAddress } = {},
 ): Promise<SquarePayment> {
-  const currency = opts.currency && env.square.locations[opts.currency] ? opts.currency : invoice.currency;
+  // The amount and the currency must always describe the same money. This once
+  // fell back to `invoice.currency` when no per-currency Square location was
+  // configured, while keeping the already-converted amount, so a USD-converted
+  // figure was sent labelled with the invoice's own currency and the client was
+  // charged the wrong amount. Use the requested currency verbatim, or refuse to
+  // charge at all.
+  const currency = opts.currency ?? invoice.currency;
+  if (!env.square.locations[currency] && currency !== env.square.defaultCurrency) {
+    throw new Error(`No Square location is configured for ${currency}; refusing to charge invoice ${invoice.number}.`);
+  }
   const amount = opts.amount != null ? opts.amount : Number(invoice.total);
   const cfg = configFor(currency);
 
@@ -181,21 +190,29 @@ export async function chargeInvoiceWithToken(
   return payment;
 }
 
+/** The public URL Square POSTs event notifications to (part of the signature). */
+function notificationUrl(): string {
+  if (env.square.webhookUrl) return env.square.webhookUrl;
+  return `${env.apiUrl.replace(/\/+$/, "")}/api/webhooks/square`;
+}
+
 /**
  * Verifies the Square webhook signature (HMAC-SHA256).
- * Format of header value: `{prefix}_{base64(hmac)}` where prefix is the
- * part of the signature key before the first underscore.
+ *
+ * Square signs the notification URL concatenated with the raw request body and
+ * sends the base64 digest in the `x-square-hmacsha256-signature` header. Note
+ * that the digest is *not* wrapped in a `{prefix}_` envelope.
+ *
+ * This fails closed. Previously an unset signature key meant every caller was
+ * trusted, and the digest was computed over the body alone, so a configured key
+ * would have rejected every genuine webhook instead.
  */
-export function verifyWebhookSignature(signature: string, rawBody: string): boolean {
-  if (!env.square.webhookSignatureKey) return true;
-  const split = signature.split("_");
-  const prefix = split[0];
-  const provided = split.slice(1).join("_");
-  const hmac = crypto.createHmac("sha256", env.square.webhookSignatureKey);
-  const expected = hmac.update(rawBody).digest("base64");
-  try {
-    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected)) && prefix.length > 0;
-  } catch {
-    return false;
-  }
+export function verifyWebhookSignature(signature: string, rawBody: string, url: string = notificationUrl()): boolean {
+  const key = env.square.webhookSignatureKey;
+  if (!key || !signature) return false;
+
+  const computed = Buffer.from(crypto.createHmac("sha256", key).update(url + rawBody, "utf8").digest("base64"), "utf8");
+  const provided = Buffer.from(signature, "utf8");
+  if (provided.length !== computed.length) return false;
+  return crypto.timingSafeEqual(provided, computed);
 }

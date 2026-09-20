@@ -45,6 +45,7 @@ Single app + one PostgreSQL service.
    - `JWT_SECRET`, `JWT_REFRESH_SECRET`, `SEED_ADMIN_PASSWORD`, `INVITE_TOKEN`
    - `CLIENT_URL`, `API_URL` = your public HTTPS domain
    - Square production: `SQUARE_ENVIRONMENT=production`, `SQUARE_APP_ID=sq0idp-69IRWFqy7jws1wyTknhLhw`, plus the live `SQUARE_ACCESS_TOKEN` and `SQUARE_LOCATION_ID` (USD).
+- `SQUARE_WEBHOOK_SIGNATURE_KEY` is **required** — it is the signature key of your webhook subscription. Without it the app refuses to start, and the webhook endpoint rejects every request. Register `https://your-domain.com/api/webhooks/square` as the notification URL in the Square developer console, since that URL is part of the signed payload (override it with `SQUARE_WEBHOOK_URL` if the public URL differs from `API_URL`).
    - Optional `SMTP_*` for invoice emails.
 5. Mount a persistent volume on `/app/backend/uploads` so uploaded logos survive restarts.
 6. On start the container runs `prisma migrate deploy` + an idempotent seed, then starts the API.

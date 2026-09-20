@@ -27,3 +27,14 @@ export function can(module: ModuleName, action: Action) {
     }
   };
 }
+
+/**
+ * Administrator-only gate for surfaces that have no RBAC module of their own
+ * (settings, currency rates). Anything that can influence how much a client is
+ * charged must not be reachable by a module-scoped or read-only role.
+ */
+export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
+  const roleName = req.user?.roleName?.toLowerCase();
+  if (roleName === "admin" || roleName === "super-admin") return next();
+  return next(new ApiError(403, "This action requires an administrator account"));
+}

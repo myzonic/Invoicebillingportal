@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Bold, Italic, Underline, Strikethrough, List, ListOrdered, RemoveFormatting } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeHtml } from "@/lib/utils";
 
 interface RichTextEditorProps {
   value: string;
@@ -25,7 +25,9 @@ export function RichTextEditor({ value, onChange, placeholder, className, minHei
 
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== value) {
-      ref.current.innerHTML = value || "";
+      // Editing a stored description must not execute its markup either, so
+      // the same allowlist sanitiser guards this assignment as the renderers.
+      ref.current.innerHTML = sanitizeHtml(value || "");
     }
   }, [value]);
 

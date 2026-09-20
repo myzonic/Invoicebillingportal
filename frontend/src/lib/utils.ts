@@ -71,11 +71,99 @@ export function errorMessage(err: unknown): string {
   return String(err);
 }
 
-/** Convert a stored description (HTML from the rich editor, or legacy plain text) into display HTML. */
+/**
+ * Tags that may survive sanitising. Intentionally limited to what the rich-text
+ * editor and pasted invoice copy realistically produce.
+ */
+const ALLOWED_TAGS = new Set([
+  "b", "strong", "i", "em", "u", "s", "strike", "del", "ins", "sub", "sup", "small",
+  "p", "br", "div", "span", "hr", "blockquote", "code", "pre",
+  "ul", "ol", "li", "a",
+]);
+
+const VOID_TAGS = new Set(["br", "hr"]);
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Rebuilds a single tag. Returns the replacement markup, or `null` when the
+ * input is not tag-shaped at all (e.g. the literal text `<100`) and should be
+ * kept as escaped text.
+ *
+ * No attributes are ever passed through, which removes every `on*` event
+ * handler and every `javascript:` URL in one move. Links keep a validated
+ * http(s)/mailto href and nothing else.
+ */
+function rebuildTag(source: string): string | null {
+  const match = /^<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)/.exec(source);
+  if (!match) return null;
+
+  const closing = match[1] === "/";
+  const name = match[2].toLowerCase();
+  if (!ALLOWED_TAGS.has(name)) return "";
+
+  if (name === "a") {
+    if (closing) return "</a>";
+    const href = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(source);
+    const url = (href?.[1] ?? href?.[2] ?? href?.[3] ?? "").trim();
+    if (!/^(https?:\/\/|mailto:)[^\s"']+$/i.test(url)) return "";
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer nofollow">`;
+  }
+
+  if (closing) return `</${name}>`;
+  return VOID_TAGS.has(name) ? `<${name} />` : `<${name}>`;
+}
+
+/**
+ * Strict allowlist sanitiser for stored rich-text descriptions.
+ *
+ * Text between tags is escaped, so a malformed tag can never become a real
+ * element, and anything not explicitly allowed is dropped. Safe against the
+ * stored-XSS path where an invoice description is rendered with
+ * `dangerouslySetInnerHTML` on the admin and client-facing payment pages.
+ */
+export function sanitizeHtml(value?: string | null): string {
+  const input = value || "";
+  let out = "";
+  let cursor = 0;
+
+  while (cursor < input.length) {
+    const open = input.indexOf("<", cursor);
+    if (open === -1) {
+      out += escapeHtml(input.slice(cursor));
+      break;
+    }
+    out += escapeHtml(input.slice(cursor, open));
+
+    const close = input.indexOf(">", open);
+    if (close === -1) {
+      // Unterminated tag: the remainder is plain text.
+      out += escapeHtml(input.slice(open));
+      break;
+    }
+
+    const tag = input.slice(open, close + 1);
+    const rebuilt = rebuildTag(tag);
+    out += rebuilt === null ? escapeHtml(tag) : rebuilt;
+    cursor = close + 1;
+  }
+
+  return out;
+}
+
+/** Convert a stored description (HTML from the rich editor, or legacy plain text) into safe display HTML. */
 export function richText(value?: string | null): string {
   if (!value) return "";
-  if (/<\/?[a-z][^>]*>/i.test(value)) return value;
-  return value.replace(/\n/g, "<br>");
+  // Legacy plain-text descriptions get real line breaks; everything then goes
+  // through the same allowlist sanitiser.
+  return sanitizeHtml(value.replace(/\n/g, "<br />"));
 }
 
 /** Strip tags so a rich-text description can be validated as non-empty. */

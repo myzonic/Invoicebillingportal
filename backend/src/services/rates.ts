@@ -66,11 +66,11 @@ export async function getRates() {
   const over = overrides || {};
   const rates: Record<string, number> = { [BASE_CURRENCY]: 1 };
   for (const c of CURRENCIES) {
-    if (over[c] != null && over[c] > 0) rates[c] = over[c];
+    if (c !== BASE_CURRENCY && over[c] != null && over[c] > 0) rates[c] = over[c];
     else if (live?.rates[c] != null) rates[c] = live.rates[c];
     else rates[c] = 1;
   }
-  const active = Object.keys(over).filter((k) => over[k] > 0);
+  const active = Object.keys(over).filter((k) => k !== BASE_CURRENCY && over[k] > 0);
   return {
     base: BASE_CURRENCY,
     currencies: CURRENCIES,
@@ -90,7 +90,10 @@ export async function getRates() {
 export async function setOverrides(input: Record<string, number | null | undefined>) {
   const over = (await getSetting<Overrides>("fx_overrides")) || {};
   for (const [cur, val] of Object.entries(input)) {
-    if (!CURRENCIES.includes(cur)) continue;
+    // USD is the base currency: its rate is definitionally 1, so allowing an
+    // override would silently re-scale every converted amount and therefore
+    // every amount charged. Ignore it here as well as when applying rates.
+    if (!CURRENCIES.includes(cur) || cur === BASE_CURRENCY) continue;
     if (val != null && val > 0) over[cur] = val;
     else delete over[cur];
   }

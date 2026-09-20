@@ -45,7 +45,16 @@ export const env = {
     locationId: required("SQUARE_LOCATION_ID"),
     applicationId: squareAppId,
     environment: squareEnvironment,
-    webhookSignatureKey: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || "",
+    /**
+     * Currency the default SQUARE_ACCESS_TOKEN/SQUARE_LOCATION_ID account
+     * settles in. Charges are always computed in this currency.
+     */
+    defaultCurrency: (process.env.SQUARE_DEFAULT_CURRENCY || "USD").toUpperCase(),
+    webhookSignatureKey: required("SQUARE_WEBHOOK_SIGNATURE_KEY"),
+    // Must match the notification URL registered in the Square developer
+    // console exactly, because it is part of the signed payload. Leave empty
+    // to derive it from API_URL + /api/webhooks/square.
+    webhookUrl: process.env.SQUARE_WEBHOOK_URL || "",
     locations: squareLocations(),
   },
 
