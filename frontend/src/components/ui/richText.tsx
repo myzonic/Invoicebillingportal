@@ -51,7 +51,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, minHei
             title={title}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => exec(cmd)}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-[#fff3d4] hover:text-foreground"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-neutral-100 hover:text-foreground"
           >
             <Icon className="size-4" />
           </button>

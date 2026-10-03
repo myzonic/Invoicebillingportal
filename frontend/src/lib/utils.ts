@@ -27,7 +27,7 @@ export function money(value: number | string | undefined | null, currency = "USD
 }
 
 /** Default brand accent used when an invoice has no custom color. */
-export const DEFAULT_BRAND_COLOR = "#e0a423";
+export const DEFAULT_BRAND_COLOR = "#111111";
 
 function hexRgb(hex: string): [number, number, number] {
   let h = (hex || "").replace("#", "").trim();
@@ -37,7 +37,7 @@ function hexRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** Brand accent color for an invoice (falls back to the gold default). */
+/** Brand accent color for an invoice (falls back to the neutral default). */
 export function brandColor(color?: string | null): string {
   if (!color) return DEFAULT_BRAND_COLOR;
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : DEFAULT_BRAND_COLOR;

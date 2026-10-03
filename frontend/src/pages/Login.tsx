@@ -35,14 +35,12 @@ export default function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#fffdf5] via-[#fff3d4] to-[#ffe6ab] p-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,200,60,0.4),transparent_55%),radial-gradient(ellipse_at_bottom_left,rgba(212,164,18,0.18),transparent_55%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(to_right,rgba(180,140,20,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(180,140,20,0.08)_1px,transparent_1px)] [background-size:44px_44px]" />
+    <div className="relative flex min-h-screen items-center justify-center bg-neutral-100 p-4">
 
-      <Card className="relative w-full max-w-sm border-[#eccf83] bg-white/95 text-neutral-900 shadow-[0_24px_60px_-24px_rgba(184,134,11,0.5)] backdrop-blur-xl">
+      <Card className="relative w-full max-w-sm border-neutral-200 bg-white text-neutral-900 shadow-xl">
         <CardContent>
           <div className="mb-8 flex flex-col items-center gap-3">
-            <div className="flex size-20 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-[#ffe08a] to-[#e0a423] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ring-1 ring-[#d9a520]">
+            <div className="flex size-20 items-center justify-center overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200">
               <Logo className="size-16" />
             </div>
             <div className="text-center">
@@ -58,7 +56,7 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="border-[#e7c86b] bg-white text-neutral-900 placeholder:text-neutral-400"
+                className="border-neutral-300 bg-white text-neutral-900 placeholder:text-neutral-400"
               />
             </Field>
             <Field label="Password" required>
@@ -68,13 +66,13 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="border-[#e7c86b] bg-white text-neutral-900 placeholder:text-neutral-400"
+                className="border-neutral-300 bg-white text-neutral-900 placeholder:text-neutral-400"
               />
             </Field>
             <button
               type="submit"
               disabled={isLoading}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(180deg,#ffe594_0%,#f6c445_45%,#e0a423_100%)] px-6 text-sm font-bold text-neutral-900 shadow-[0_8px_20px_-6px_rgba(196,148,30,0.6),inset_0_1px_0_rgba(255,255,255,0.85)] outline-none transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-neutral-900 px-6 text-sm font-bold text-white shadow-lg outline-none transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-60"
             >
               {isLoading ? "Signing in..." : "Sign in"}
             </button>

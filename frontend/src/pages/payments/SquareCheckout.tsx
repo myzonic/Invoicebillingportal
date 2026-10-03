@@ -174,8 +174,8 @@ export default function SquareCheckout() {
               >
                 {brand?.name || company.name}
               </div>
-              <div className="mt-1 text-xs text-[#ffe9b8]">{brand?.address || company.address}</div>
-              <div className="text-xs text-[#ffe9b8]">
+              <div className="mt-1 text-xs text-white/75">{brand?.address || company.address}</div>
+              <div className="text-xs text-white/75">
                 {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
               </div>
             </div>
@@ -191,7 +191,7 @@ export default function SquareCheckout() {
               >
                 Invoice
               </div>
-              <div className="mt-1 text-sm font-medium text-[#ffe9b8]"># {inv.number}</div>
+              <div className="mt-1 text-sm font-medium text-white/75"># {inv.number}</div>
             </div>
           </div>
 
@@ -268,7 +268,7 @@ export default function SquareCheckout() {
           </div>
 
           <div className="bg-[#171719] px-6 py-4 sm:px-10">
-            <p className="text-sm text-[#ffe9b8]">Thank you for your business. {company.name}</p>
+            <p className="text-sm text-white/75">Thank you for your business. {company.name}</p>
             {company.website || company.email ? (
               <p className="mt-1 text-xs" style={{ color: shade(accent, 0.35) }}>
                 {company.website}
@@ -374,7 +374,7 @@ export default function SquareCheckout() {
                           placeholder="Name on card"
                           value={billing.name}
                           onChange={(e) => setB("name", e.target.value)}
-                          className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-[#d9a520] placeholder:text-neutral-400"
+                          className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-900 placeholder:text-neutral-400"
                           style={inputBorder}
                         />
                       </div>
@@ -396,7 +396,7 @@ export default function SquareCheckout() {
                             placeholder="Street address"
                             value={billing.addressLine1}
                             onChange={(e) => setB("addressLine1", e.target.value)}
-                            className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-[#d9a520] placeholder:text-neutral-400"
+                            className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-900 placeholder:text-neutral-400"
                             style={inputBorder}
                           />
                         </div>
@@ -411,7 +411,7 @@ export default function SquareCheckout() {
                               placeholder="City"
                               value={billing.city}
                               onChange={(e) => setB("city", e.target.value)}
-                              className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-[#d9a520] placeholder:text-neutral-400"
+                              className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-900 placeholder:text-neutral-400"
                               style={inputBorder}
                             />
                           </div>
@@ -425,7 +425,7 @@ export default function SquareCheckout() {
                               placeholder="State / Province"
                               value={billing.state}
                               onChange={(e) => setB("state", e.target.value)}
-                              className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-[#d9a520] placeholder:text-neutral-400"
+                              className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-900 placeholder:text-neutral-400"
                               style={inputBorder}
                             />
                           </div>
@@ -440,7 +440,7 @@ export default function SquareCheckout() {
                             placeholder="e.g. 10001"
                             value={billing.postalCode}
                             onChange={(e) => setB("postalCode", e.target.value)}
-                            className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-[#d9a520] placeholder:text-neutral-400"
+                            className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-900 placeholder:text-neutral-400"
                             style={inputBorder}
                           />
                         </div>

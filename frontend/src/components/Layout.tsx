@@ -60,12 +60,12 @@ export default function Layout() {
       <div className="flex h-full flex-col">
         <div
           className={cn(
-            "flex h-16 shrink-0 items-center gap-2.5 border-b border-[#e7c86b] px-5",
-            "bg-gradient-to-r from-[#ffe9b8] via-transparent to-transparent",
+            "flex h-16 shrink-0 items-center gap-2.5 border-b border-neutral-200 px-5",
+            "bg-white",
             collapsed && "justify-center px-2",
           )}
         >
-          <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-[#ffe08a] to-[#e0a423] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ring-1 ring-[#d9a520]">
+          <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-100 ring-1 ring-neutral-200">
             <Logo className={cn("size-10", collapsed && "size-9")} />
           </div>
           {!collapsed && <span className="truncate text-sm font-bold text-neutral-900">{branding.portalName}</span>}
@@ -80,8 +80,8 @@ export default function Layout() {
                 cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                   isActive
-                    ? "bg-gradient-to-r from-[#ffe594] to-[#f6c445] text-neutral-900 shadow-sm ring-1 ring-inset ring-[#d9a520]"
-                    : "text-neutral-600 hover:bg-[#fff3d4] hover:text-neutral-900",
+                    ? "bg-neutral-900 text-white shadow-sm"
+                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
                   collapsed && "justify-center px-0",
                 )
               }
@@ -92,9 +92,9 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-[#e7c86b] p-3">
+        <div className="border-t border-neutral-200 p-3">
           <div className={cn("flex items-center gap-2 rounded-md px-2 py-2", collapsed && "justify-center")}>
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#ffe08a] to-[#e0a423] text-xs font-bold text-neutral-900 ring-1 ring-[#d9a520]">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-bold text-white">
               {user?.name?.[0]?.toUpperCase() ?? "?"}
             </div>
             {!collapsed && (
@@ -118,7 +118,7 @@ export default function Layout() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "hidden shrink-0 flex-col border-r border-[#e7c86b] bg-card md:flex",
+          "hidden shrink-0 flex-col border-r border-neutral-200 bg-card md:flex",
           collapsed ? "w-16" : "w-56",
         )}
       >
@@ -147,7 +147,7 @@ export default function Layout() {
           >
             <ChevronLeft className={cn("size-4 transition-transform", collapsed && "rotate-180")} />
           </Button>
-          <div className="ml-auto bg-gradient-to-r from-[#e0a423] to-neutral-900 bg-clip-text text-sm font-bold text-transparent">
+          <div className="ml-auto text-sm font-bold text-neutral-900">
             {branding.companyName} &middot; {branding.portalTagline}
           </div>
         </header>

@@ -23,7 +23,7 @@ import { Spinner } from "@/components/ui/table";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 const STATUSES = ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"];
-const BRAND_COLORS = ["#e0a423", "#171719", "#2563eb", "#0d9488", "#16a34a", "#7c3aed", "#dc2626", "#db2777", "#f97316"];
+const BRAND_COLORS = ["#111111", "#374151", "#2563eb", "#0d9488", "#16a34a", "#7c3aed", "#dc2626", "#db2777", "#f97316"];
 
 export default function InvoiceForm() {
   const { id } = useParams();
@@ -42,7 +42,7 @@ export default function InvoiceForm() {
     clientId: params.get("client") || "",
     brandId: "",
     currency: "USD",
-    color: "#e0a423",
+    color: "#111111",
     taxRate: 0,
     discountAmount: 0,
     notes: "",
@@ -59,7 +59,7 @@ export default function InvoiceForm() {
         clientId: inv.clientId,
         brandId: inv.brandId || "",
         currency: inv.currency,
-        color: inv.color || "#e0a423",
+        color: inv.color || "#111111",
         taxRate: Number(inv.taxRate),
         discountAmount: Number(inv.discountAmount),
         notes: inv.notes || "",

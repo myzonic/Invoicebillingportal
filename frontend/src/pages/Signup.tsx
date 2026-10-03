@@ -36,12 +36,11 @@ export default function Signup() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#fffdf5] via-[#fff3d4] to-[#ffe6ab] p-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,200,60,0.4),transparent_55%),radial-gradient(ellipse_at_bottom_left,rgba(212,164,18,0.18),transparent_55%)]" />
-      <Card className="relative w-full max-w-sm border-[#eccf83] bg-white/95 text-neutral-900 shadow-[0_24px_60px_-24px_rgba(184,134,11,0.5)] backdrop-blur-xl">
+    <div className="relative flex min-h-screen items-center justify-center bg-neutral-100 p-4">
+      <Card className="relative w-full max-w-sm border-neutral-200 bg-white text-neutral-900 shadow-xl">
         <CardContent>
           <div className="mb-4 flex items-center justify-center">
-            <div className="flex size-20 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-[#ffe08a] to-[#e0a423] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ring-1 ring-[#d9a520]">
+            <div className="flex size-20 items-center justify-center overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200">
               <Logo className="size-16" />
             </div>
           </div>

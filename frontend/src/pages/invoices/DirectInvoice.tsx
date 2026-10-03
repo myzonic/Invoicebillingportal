@@ -19,7 +19,7 @@ export default function DirectInvoice() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [color, setColor] = useState("#e0a423");
+  const [color, setColor] = useState("#111111");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
   const { data: clients } = useClientsQuery({ limit: 100 });
@@ -105,7 +105,7 @@ export default function DirectInvoice() {
                   <span className="text-[10px] font-bold text-white/90">▼</span>
                 </label>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {["#e0a423", "#171719", "#2563eb", "#0d9488", "#16a34a", "#7c3aed", "#dc2626", "#db2777", "#f97316"].map((c) => (
+                  {["#111111", "#374151", "#2563eb", "#0d9488", "#16a34a", "#7c3aed", "#dc2626", "#db2777", "#f97316"].map((c) => (
                     <button
                       key={c}
                       type="button"
