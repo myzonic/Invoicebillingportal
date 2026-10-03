@@ -187,7 +187,7 @@ export default function BrandForm() {
               <Textarea
                 value={form.pdfHeader}
                 onChange={(e) => set("pdfHeader", e.target.value)}
-                placeholder={"e.g. 42 Shahrah-e-Faisal, Karachi\ninvoice@myzonic.com"}
+                placeholder={"e.g. 123 Business Street, City\ninvoice@example.com"}
                 rows={3}
               />
             </Field>

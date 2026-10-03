@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Card, CardContent } from "@/components/ui/card";
 import Logo from "@/components/Logo";
+import { branding } from "@/config/branding";
 
 export default function Signup() {
   const { token = "" } = useParams();
@@ -45,7 +46,7 @@ export default function Signup() {
             </div>
           </div>
           <h1 className="mb-1 text-lg font-bold text-neutral-900">Create your account</h1>
-          <p className="mb-6 text-sm text-neutral-600">Complete the invite to join Myzonic Portal</p>
+          <p className="mb-6 text-sm text-neutral-600">Complete the invite to join {branding.portalName}</p>
           <form onSubmit={onSubmit} className="space-y-4">
             <Field label="Full name" required>
               <Input value={name} onChange={(e) => setName(e.target.value)} required />

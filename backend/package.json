@@ -1,8 +1,8 @@
 {
-  "name": "myzonic-portal-backend",
+  "name": "billing-portal-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Myzonic Finance & Billing Portal - backend API",
+  "description": "Self-hosted finance and billing portal backend API",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -5,6 +5,7 @@ import { brandColor, formatDate, money, rgba, richText, shade } from "@/lib/util
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner, EmptyState } from "@/components/ui/table";
 import Logo from "@/components/Logo";
+import { branding } from "@/config/branding";
 
 export default function PaymentLink() {
   const { id = "" } = useParams();
@@ -76,7 +77,7 @@ export default function PaymentLink() {
           </div>
 
           <p className="mb-6 text-sm text-neutral-600">
-            {inv.brand?.name || "Myzonic"} â€¢ billed to <span className="font-medium text-neutral-900">{inv.client?.name}</span> â€¢ due{" "}
+            {inv.brand?.name || branding.defaultBrandName} â€¢ billed to <span className="font-medium text-neutral-900">{inv.client?.name}</span> â€¢ due{" "}
             {formatDate(inv.dueDate)}
           </p>
 

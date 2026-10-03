@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Spinner, EmptyState } from "@/components/ui/table";
 import Logo from "@/components/Logo";
 import type { SquareCard } from "@/types/square";
+import { branding } from "@/config/branding";
 
 interface CheckoutConfig {
   applicationId: string;
@@ -89,7 +90,7 @@ export default function SquareCheckout() {
   const inv = data.data;
   const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number }[];
   const brand = inv.brand;
-  const company = inv.company || { name: brand?.name || "Myzonic", email: "", phone: "", address: "", website: "" };
+  const company = inv.company || { name: brand?.name || branding.companyName, email: "", phone: "", address: "", website: "" };
   const accent = brandColor(inv.color);
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);
@@ -297,7 +298,7 @@ export default function SquareCheckout() {
                   <Logo className="size-12" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold leading-tight text-neutral-900">pay.myzonic.com</p>
+                  <p className="text-sm font-bold leading-tight text-neutral-900">{branding.paymentHost}</p>
                   <p className="flex items-center gap-1 text-[11px] text-neutral-500">
                     <Lock className="size-3" style={{ color: accentDark }} /> Secure checkout
                   </p>

@@ -62,7 +62,24 @@ export function createApp(): Express {
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  app.get("/api/health", (_req, res) => res.json({ success: true, message: "Myzonic Portal API is healthy" }));
+  app.get("/api/health", (_req, res) => res.json({ success: true, message: `${env.branding.portalName} API is healthy` }));
+
+  // Runtime-safe public branding. Only explicitly allow-listed, non-secret
+  // values are exposed to the browser.
+  app.get("/app-config.js", (_req, res) => {
+    res.type("application/javascript");
+    res.set("Cache-Control", "no-store");
+    res.send(
+      `window.__APP_CONFIG__=${JSON.stringify({
+        portalName: env.branding.portalName,
+        portalTagline: env.branding.portalTagline,
+        companyName: env.branding.companyName,
+        paymentHost: env.branding.paymentHost,
+        logoUrl: env.branding.publicLogoUrl,
+        defaultBrandName: env.branding.defaultBrandName,
+      })};`,
+    );
+  });
 
   app.use("/api/auth", authRoutes);
   app.use("/api/users", userRoutes);

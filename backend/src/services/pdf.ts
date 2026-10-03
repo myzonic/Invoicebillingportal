@@ -278,12 +278,10 @@ function loadImage(file: string): LoadedImage | null {
   }
 }
 
-/** Uploaded brand logo (stored under the uploads dir) if one exists, otherwise the bundled Myzonic logo. */
+/** Uploaded brand logo stored under the uploads directory, if one exists. */
 function resolveLogo(brand: Brand | null): LoadedImage | null {
   const uploaded = brand?.logoUrl?.startsWith("/uploads/") ? path.resolve(env.upload.dir, path.basename(brand.logoUrl)) : null;
-  const fromBrand = uploaded && /\.(png|jpe?g)$/i.test(uploaded) ? loadImage(uploaded) : null;
-  if (fromBrand) return fromBrand;
-  return loadImage(path.join(process.cwd(), "..", "frontend", "public", "logo.jpg"));
+  return uploaded && /\.(png|jpe?g)$/i.test(uploaded) ? loadImage(uploaded) : null;
 }
 
 export async function renderInvoicePdf({ invoice, client, brand, company }: InvoicePdfData): Promise<Uint8Array> {

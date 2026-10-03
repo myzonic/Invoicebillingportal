@@ -282,7 +282,7 @@ router.post(
       client: invoice.client,
       brand: invoice.brand,
       company: {
-        name: company?.name || "Myzonic",
+        name: company?.name || env.branding.companyName,
         email: company?.email || "",
         phone: company?.phone || "",
         address: company?.address || "",
@@ -290,7 +290,7 @@ router.post(
       },
     });
 
-    const subject = `Invoice ${invoice.number} from ${invoice.brand?.name || company?.name || "Myzonic"}`;
+    const subject = `Invoice ${invoice.number} from ${invoice.brand?.name || company?.name || env.branding.companyName}`;
     const result = await sendInvoiceEmail({
       invoiceId: invoice.id,
       toEmail: invoice.client.email,
@@ -342,7 +342,7 @@ router.get(
       client: invoice.client,
       brand: invoice.brand,
       company: {
-        name: company?.name || "Myzonic",
+        name: company?.name || env.branding.companyName,
         email: company?.email || "",
         phone: company?.phone || "",
         address: company?.address || "",

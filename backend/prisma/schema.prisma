@@ -1,4 +1,4 @@
-// Myzonic Finance & Billing Portal - database schema
+// Finance & Billing Portal database schema
 // PostgreSQL via Prisma ORM
 
 generator client {

@@ -197,7 +197,7 @@ router.get(
         client: invoice.client,
         brand: invoice.brand,
         company: {
-          name: company?.name || "Myzonic",
+          name: company?.name || env.branding.companyName,
           email: company?.email || "",
           phone: company?.phone || "",
           address: company?.address || "",
@@ -254,7 +254,7 @@ router.get(
       client: invoice.client,
       brand: invoice.brand,
       company: {
-        name: company?.name || "Myzonic",
+        name: company?.name || env.branding.companyName,
         email: company?.email || "",
         phone: company?.phone || "",
         address: company?.address || "",

@@ -139,7 +139,7 @@ router.delete(
 );
 
 async function createTemporaryPassword() {
-  return `Myzonic${Math.random().toString(36).slice(2, 10)}!`;
+  return `Temp${Math.random().toString(36).slice(2, 10)}!`;
 }
 
 export default router;

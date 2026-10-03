@@ -1,4 +1,4 @@
-# Myzonic Finance & Billing - production compose (Dokploy reference / local test).
+# Billing Portal production compose (Dokploy reference / local test).
 # On Dokploy you can either deploy the Dockerfile from your Git repo, or use this
 # compose (PostgreSQL service is also available as a native Dokploy service).
 #
@@ -11,11 +11,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: myzonic
+      POSTGRES_DB: billing_portal
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d myzonic"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d billing_portal"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -27,12 +27,21 @@ services:
       - "3000:3000"
     environment:
       PORT: "3000"
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/myzonic?schema=public
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/billing_portal?schema=public
       API_URL: ${API_URL:-https://localhost}
       CLIENT_URL: ${CLIENT_URL:-https://localhost}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
-      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@myzonic.com}
+      PORTAL_NAME: ${PORTAL_NAME:-Billing Portal}
+      PORTAL_TAGLINE: ${PORTAL_TAGLINE:-Finance & Billing}
+      COMPANY_NAME: ${COMPANY_NAME:-Your Company}
+      COMPANY_EMAIL: ${COMPANY_EMAIL:-billing@example.com}
+      COMPANY_WEBSITE: ${COMPANY_WEBSITE:-https://example.com}
+      PAYMENT_HOST: ${PAYMENT_HOST:-localhost}
+      PUBLIC_LOGO_URL: ${PUBLIC_LOGO_URL:-}
+      DEFAULT_BRAND_NAME: ${DEFAULT_BRAND_NAME:-Your Company}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Portal Admin}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD}
       INVITE_TOKEN: ${INVITE_TOKEN:?set INVITE_TOKEN}
       SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT:-sandbox}
@@ -45,7 +54,7 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-"Myzonic Finance <billing@myzonic.com>"}
+      SMTP_FROM: ${SMTP_FROM:-"Billing Portal <billing@example.com>"}
       UPLOAD_DIR: uploads
       MAX_UPLOAD_MB: "10"
     volumes:

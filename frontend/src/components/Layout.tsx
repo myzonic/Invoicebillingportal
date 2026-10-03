@@ -24,6 +24,7 @@ import { tokenStore } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useMeQuery } from "@/app/apiSlice";
 import Logo from "@/components/Logo";
+import { branding } from "@/config/branding";
 
 const NAV = [
   { to: "/dashboard/main", label: "Overview", icon: LayoutDashboard },
@@ -67,7 +68,7 @@ export default function Layout() {
           <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-[#ffe08a] to-[#e0a423] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ring-1 ring-[#d9a520]">
             <Logo className={cn("size-10", collapsed && "size-9")} />
           </div>
-          {!collapsed && <span className="truncate text-sm font-bold text-neutral-900">Myzonic Portal</span>}
+          {!collapsed && <span className="truncate text-sm font-bold text-neutral-900">{branding.portalName}</span>}
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {NAV.map((item) => (
@@ -147,7 +148,7 @@ export default function Layout() {
             <ChevronLeft className={cn("size-4 transition-transform", collapsed && "rotate-180")} />
           </Button>
           <div className="ml-auto bg-gradient-to-r from-[#e0a423] to-neutral-900 bg-clip-text text-sm font-bold text-transparent">
-            Myzonic Finance &amp; Billing
+            {branding.companyName} &middot; {branding.portalTagline}
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">

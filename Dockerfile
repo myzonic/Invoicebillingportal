@@ -27,7 +27,6 @@ COPY --from=backend /app/node_modules ./node_modules
 COPY --from=backend /app/dist ./dist
 COPY --from=backend /app/prisma ./prisma
 COPY --from=frontend /app/dist /app/frontend/dist
-COPY --from=frontend /app/public/logo.jpg /app/frontend/public/logo.jpg
 RUN mkdir -p /app/backend/uploads
 EXPOSE 3000
 CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/server.js"]

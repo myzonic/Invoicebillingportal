@@ -4,6 +4,15 @@ import crypto from "crypto";
 
 const prisma = new PrismaClient();
 
+const seedConfig = {
+  adminEmail: process.env.SEED_ADMIN_EMAIL || "admin@example.com",
+  adminName: process.env.SEED_ADMIN_NAME || "Portal Admin",
+  defaultBrandName: process.env.DEFAULT_BRAND_NAME || process.env.COMPANY_NAME || "Your Company",
+  companyName: process.env.COMPANY_NAME || "Your Company",
+  companyEmail: process.env.COMPANY_EMAIL || "billing@example.com",
+  companyWebsite: process.env.COMPANY_WEBSITE || "https://example.com",
+};
+
 const MODULES: ModuleName[] = [
   "dashboard",
   "clients",
@@ -56,23 +65,23 @@ async function main() {
     },
   });
 
-  const email = process.env.SEED_ADMIN_EMAIL || "admin@myzonic.com";
+  const email = seedConfig.adminEmail;
   const password = process.env.SEED_ADMIN_PASSWORD || "ChangeMe123!";
   const hashed = await bcrypt.hash(password, 10);
 
   const admin = await prisma.user.upsert({
     where: { email },
     update: {},
-    create: { email, password: hashed, name: "Myzonic Admin", roleId: adminRole.id },
+    create: { email, password: hashed, name: seedConfig.adminName, roleId: adminRole.id },
   });
 
-  let seedBrand = await prisma.brand.findFirst({ where: { name: "Myzonic" } });
+  let seedBrand = await prisma.brand.findFirst({ where: { name: seedConfig.defaultBrandName } });
   if (!seedBrand) {
     seedBrand = await prisma.brand.create({
       data: {
-        name: "Myzonic",
+        name: seedConfig.defaultBrandName,
         currency: "USD",
-        email: "billing@myzonic.com",
+        email: seedConfig.companyEmail,
         isDefault: true,
       },
     });
@@ -94,11 +103,11 @@ async function main() {
     create: {
       key: "company",
       value: {
-        name: "Myzonic Finance & Billing",
-        email: "billing@myzonic.com",
+        name: seedConfig.companyName,
+        email: seedConfig.companyEmail,
         phone: "",
         address: "",
-        website: "https://myzonic.com",
+        website: seedConfig.companyWebsite,
       },
     },
   });

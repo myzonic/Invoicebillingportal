@@ -40,6 +40,17 @@ export const env = {
   refreshExpiresIn: process.env.REFRESH_EXPIRES_IN || "30d",
   inviteToken: process.env.INVITE_TOKEN || "dev-invite-token",
 
+  branding: {
+    portalName: process.env.PORTAL_NAME || "Billing Portal",
+    portalTagline: process.env.PORTAL_TAGLINE || "Finance & Billing",
+    companyName: process.env.COMPANY_NAME || "Your Company",
+    companyEmail: process.env.COMPANY_EMAIL || "billing@example.com",
+    companyWebsite: process.env.COMPANY_WEBSITE || "https://example.com",
+    paymentHost: process.env.PAYMENT_HOST || "",
+    publicLogoUrl: process.env.PUBLIC_LOGO_URL || "",
+    defaultBrandName: process.env.DEFAULT_BRAND_NAME || process.env.COMPANY_NAME || "Your Company",
+  },
+
   square: {
     accessToken: required("SQUARE_ACCESS_TOKEN"),
     locationId: required("SQUARE_LOCATION_ID"),
@@ -64,7 +75,7 @@ export const env = {
     secure: process.env.SMTP_SECURE === "true",
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
-    from: process.env.SMTP_FROM || "Myzonic <billing@myzonic.com>",
+    from: process.env.SMTP_FROM || "Billing Portal <billing@example.com>",
   },
 
   upload: {

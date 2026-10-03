@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Card, CardContent } from "@/components/ui/card";
 import Logo from "@/components/Logo";
+import { branding } from "@/config/branding";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -45,8 +46,8 @@ export default function Login() {
               <Logo className="size-16" />
             </div>
             <div className="text-center">
-              <h1 className="text-xl font-bold tracking-tight text-neutral-900">Myzonic Portal</h1>
-              <p className="text-sm text-neutral-600">Finance &amp; Billing</p>
+              <h1 className="text-xl font-bold tracking-tight text-neutral-900">{branding.portalName}</h1>
+              <p className="text-sm text-neutral-600">{branding.portalTagline}</p>
             </div>
           </div>
           <form onSubmit={onSubmit} className="space-y-4">
