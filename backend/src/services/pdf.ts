@@ -286,7 +286,8 @@ function resolveLogo(brand: Brand | null): LoadedImage | null {
 
 export async function renderInvoicePdf({ invoice, client, brand, company }: InvoicePdfData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  const page = doc.addPage([612, 792]); // US Letter
+  // ISO A4 page size in PDF points (210 x 297 mm).
+  const page = doc.addPage([595.28, 841.89]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const italic = await doc.embedFont(StandardFonts.HelveticaOblique);

@@ -41,7 +41,7 @@ export default function PaymentLink() {
       />
 
       <Card
-        className="relative w-full max-w-lg border bg-white/95 text-neutral-900 backdrop-blur-xl"
+        className="relative w-full max-w-[794px] border bg-white/95 text-neutral-900 backdrop-blur-xl"
         style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(accent, 0.5)}` }}
       >
         <CardContent>
