@@ -47,6 +47,7 @@ export const env = {
     companyEmail: process.env.COMPANY_EMAIL || "billing@example.com",
     companyWebsite: process.env.COMPANY_WEBSITE || "https://example.com",
     paymentHost: process.env.PAYMENT_HOST || "",
+    paymentUrl: (process.env.PAYMENT_URL || process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, ""),
     publicLogoUrl: process.env.PUBLIC_LOGO_URL || "",
     defaultBrandName: process.env.DEFAULT_BRAND_NAME || process.env.COMPANY_NAME || "Your Company",
   },

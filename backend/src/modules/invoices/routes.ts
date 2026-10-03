@@ -299,7 +299,7 @@ router.post(
         <p>Hi ${invoice.client.name},</p>
         <p>Your invoice <strong>${invoice.number}</strong> is attached.</p>
         <p>Amount due: <strong>${money(invoice.total, invoice.currency)}</strong></p>
-        ${invoice.squarePaymentLink ? `<p><a href="${invoice.squarePaymentLink}">Pay online now</a></p>` : ""}
+        <p><a href="${invoice.squarePaymentLink || `${env.branding.paymentUrl}/invoice/payment-link/${invoice.id}`}">Pay online now</a></p>
         <p>Thank you for your business.</p>
       `,
       attachments: [{ filename: `${invoice.number}.pdf`, content: pdf, contentType: "application/pdf" }],

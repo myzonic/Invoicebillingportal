@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR, Spinner, EmptyState } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { branding } from "@/config/branding";
 
 export default function InvoiceDetail() {
   const { id = "" } = useParams();
@@ -82,7 +83,7 @@ export default function InvoiceDetail() {
   };
 
   const copyLink = async () => {
-    const url = invoice.squarePaymentLink || `${window.location.origin}/invoice/payment-link/${id}`;
+    const url = invoice.squarePaymentLink || `${branding.paymentUrl}/invoice/payment-link/${id}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

@@ -75,6 +75,7 @@ export function createApp(): Express {
         portalTagline: env.branding.portalTagline,
         companyName: env.branding.companyName,
         paymentHost: env.branding.paymentHost,
+        paymentUrl: env.branding.paymentUrl,
         logoUrl: env.branding.publicLogoUrl,
         defaultBrandName: env.branding.defaultBrandName,
       })};`,
