@@ -65,7 +65,7 @@ async function main() {
     },
   });
 
-  const email = seedConfig.adminEmail;
+  const email = seedConfig.adminEmail.toLowerCase().trim();
   const password = process.env.SEED_ADMIN_PASSWORD || "ChangeMe123!";
   const hashed = await bcrypt.hash(password, 10);
 
