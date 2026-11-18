@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCw, Save } from "lucide-react";
 import { useSettingsQuery, useUpdateSettingsMutation, useRatesQuery, useRefreshRatesMutation, useSaveRatesMutation } from "@/app/apiSlice";
+import { useAppSelector } from "@/app/store";
 import { errorMessage, formatDate, money } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { Table, TBody, TD, TH, THead, TR, Spinner } from "@/components/ui/table"
 
 export default function Settings() {
   const { data, isLoading } = useSettingsQuery();
+  const user = useAppSelector((s) => s.auth.user);
+  const isAdmin = ["admin", "super-admin"].includes(user?.role?.name?.toLowerCase() || "");
   const [updateSettings, { isLoading: saving }] = useUpdateSettingsMutation();
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", website: "" });
 
@@ -86,6 +89,7 @@ export default function Settings() {
       <Card>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
+            <fieldset disabled={!isAdmin} className="space-y-4">
             <Field label="Company name" required>
               <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
             </Field>
@@ -103,11 +107,14 @@ export default function Settings() {
             <Field label="Address">
               <Textarea value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
             </Field>
-            <div className="flex justify-end">
-              <Button type="submit" loading={saving}>
-                <Save className="size-4" /> Save settings
-              </Button>
-            </div>
+            {isAdmin && (
+              <div className="flex justify-end">
+                <Button type="submit" loading={saving}>
+                  <Save className="size-4" /> Save settings
+                </Button>
+              </div>
+            )}
+            </fieldset>
           </form>
         </CardContent>
       </Card>
@@ -118,18 +125,21 @@ export default function Settings() {
             <div>
               <h3 className="text-base font-semibold tracking-tight">Currency Conversion</h3>
               <p className="text-sm text-muted-foreground">
-                Live market rates (ECB) with manual overrides. Rates are "1 {base} = X".
+                Market rates are fetched automatically every 6 hours; manual overrides always win. Rates are "1 {base} = X".
               </p>
               {rates?.data && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Source: <span className="font-medium">{sourceLabel}</span>
+                  {rates.data.provider ? ` · via ${rates.data.provider}` : ""}
                   {rates.data.updatedAt ? ` · updated ${formatDate(rates.data.updatedAt)}` : " · not fetched yet"}
                 </p>
               )}
             </div>
-            <Button variant="outline" onClick={handleRefresh} loading={refreshing}>
-              <RefreshCw className="size-4" /> Refresh live
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" onClick={handleRefresh} loading={refreshing}>
+                <RefreshCw className="size-4" /> Refresh live
+              </Button>
+            )}
           </div>
 
           {ratesLoading ? (
@@ -167,6 +177,7 @@ export default function Settings() {
                               min="0"
                               value={overrides[c] ?? ""}
                               placeholder={live != null ? live.toFixed(4) : "auto"}
+                              disabled={!isAdmin}
                               onChange={(e) => setOverrides((o) => ({ ...o, [c]: e.target.value }))}
                               className="ml-auto h-9 w-40 text-right tabular-nums"
                             />
@@ -181,9 +192,11 @@ export default function Settings() {
                 <span className="text-xs text-muted-foreground">
                   Total conversion check: 100 {base} ≈ {money(100, base)}
                 </span>
-                <Button onClick={handleSaveRates} loading={savingRates}>
-                  <Save className="size-4" /> Save rates
-                </Button>
+                {isAdmin && (
+                  <Button onClick={handleSaveRates} loading={savingRates}>
+                    <Save className="size-4" /> Save rates
+                  </Button>
+                )}
               </div>
             </>
           ) : (

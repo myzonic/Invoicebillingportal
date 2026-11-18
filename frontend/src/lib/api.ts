@@ -34,6 +34,24 @@ api.interceptors.request.use((config) => {
 
 let refreshing: Promise<string> | null = null;
 
+/** Refresh the access token once and share the request across concurrent callers. */
+export async function refreshAccessToken(): Promise<string> {
+  if (!refreshing) {
+    refreshing = (async () => {
+      const { data } = await axios.post(`${API_URL || "/api"}/auth/refresh`, {
+        refreshToken: tokenStore.refresh,
+      });
+      const { accessToken, refreshToken } = data?.data || {};
+      if (!accessToken) throw new Error("Refresh response did not include an access token");
+      tokenStore.setTokens(accessToken, refreshToken || tokenStore.refresh!);
+      return accessToken as string;
+    })().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -41,22 +59,14 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retried && tokenStore.refresh) {
       original._retried = true;
       try {
-        refreshing = refreshing || refreshToken();
-        const newToken = await refreshing;
-        refreshing = null;
+        const newToken = await refreshAccessToken();
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
         tokenStore.clear();
-        if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+        if (!window.location.pathname.startsWith("/login")) window.location.assign("/login");
       }
     }
     return Promise.reject(error);
   },
 );
-
-async function refreshToken() {
-  const { data } = await axios.post(`${API_URL || "/api"}/auth/refresh`, { refreshToken: tokenStore.refresh });
-  tokenStore.setTokens(data.data.accessToken, data.data.refreshToken);
-  return data.data.accessToken;
-}

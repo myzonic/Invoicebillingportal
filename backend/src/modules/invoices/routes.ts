@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { InvoiceStatus, LogAction, PaymentMethod, PaymentStatus } from "@prisma/client";
+import { InvoiceStatus, LogAction, PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -39,6 +39,19 @@ function computeTotals(items: z.infer<typeof itemSchema>[], taxRate: number, dis
   const taxAmount = (subtotal * taxRate) / 100;
   const total = subtotal + taxAmount - discountAmount;
   return { subtotal, taxAmount, total: Math.max(0, total) };
+}
+
+async function companyDetails() {
+  const company = (await prisma.setting.findUnique({ where: { key: "company" } }))?.value as
+    | { name?: string; email?: string; phone?: string; address?: string; website?: string }
+    | undefined;
+  return {
+    name: company?.name || env.branding.companyName,
+    email: company?.email || "",
+    phone: company?.phone || "",
+    address: company?.address || "",
+    website: company?.website || "",
+  };
 }
 
 async function nextInvoiceNumber(brandInitials: string) {
@@ -152,28 +165,40 @@ router.post(
     if (!client) throw new ApiError(404, "Client not found");
 
     const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
-    const number = await nextInvoiceNumber(await brandInitialsFor(body.brandId, client));
+    const initials = await brandInitialsFor(body.brandId, client);
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        number,
-        clientId: body.clientId,
-        brandId: body.brandId || client.brandId || undefined,
-        items: body.items,
-        subtotal,
-        taxRate: body.taxRate,
-        taxAmount,
-        discountAmount: body.discountAmount,
-        total,
-        currency: body.currency,
-        color: body.color || undefined,
-        notes: body.notes,
-        issueDate: body.issueDate,
-        dueDate: body.dueDate,
-        status: body.status ?? InvoiceStatus.DRAFT,
-      },
-      include: { client: true, brand: true },
-    });
+    // Two concurrent creations can read the same sequence value. Retry with a
+    // fresh number if the unique constraint on `number` rejects our insert.
+    let invoice: Awaited<ReturnType<typeof prisma.invoice.create>> | null = null;
+    for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
+      const number = await nextInvoiceNumber(initials);
+      try {
+        invoice = await prisma.invoice.create({
+          data: {
+            number,
+            clientId: body.clientId,
+            brandId: body.brandId || client.brandId || undefined,
+            items: body.items,
+            subtotal,
+            taxRate: body.taxRate,
+            taxAmount,
+            discountAmount: body.discountAmount,
+            total,
+            currency: body.currency,
+            color: body.color || undefined,
+            notes: body.notes,
+            issueDate: body.issueDate,
+            dueDate: body.dueDate,
+            status: body.status ?? InvoiceStatus.DRAFT,
+          },
+          include: { client: true, brand: true },
+        });
+      } catch (err) {
+        const conflict = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+        if (!conflict || attempt === 2) throw err;
+      }
+    }
+    if (!invoice) throw new ApiError(409, "Could not allocate an invoice number, please retry");
 
     await audit({
       userId: req.user?.id,
@@ -184,6 +209,49 @@ router.post(
       ip: req.ip,
     });
     res.status(201).json({ success: true, data: invoice });
+  }),
+);
+
+/** Render a PDF from unsaved form data so it can be previewed while editing. */
+router.post(
+  "/preview-pdf",
+  can("invoices", "read"),
+  asyncHandler(async (req, res) => {
+    const body = invoiceSchema.parse(req.body);
+    const client = await prisma.client.findUnique({ where: { id: body.clientId } });
+    if (!client) throw new ApiError(404, "Client not found");
+    const brandId = body.brandId || client.brandId;
+    const brand = brandId ? await prisma.brand.findUnique({ where: { id: brandId } }) : null;
+    const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
+
+    const preview = {
+      id: "preview",
+      number: "PREVIEW",
+      clientId: client.id,
+      brandId: brand?.id || null,
+      items: body.items,
+      subtotal,
+      taxRate: body.taxRate,
+      taxAmount,
+      discountAmount: body.discountAmount,
+      total,
+      currency: body.currency,
+      color: body.color || null,
+      status: body.status || InvoiceStatus.DRAFT,
+      notes: body.notes || null,
+      issueDate: body.issueDate,
+      dueDate: body.dueDate || null,
+      sentAt: null,
+      paidAt: null,
+      squarePaymentLink: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as import("@prisma/client").Invoice;
+
+    const pdf = await renderInvoicePdf({ invoice: preview, client, brand, company: await companyDetails() });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
+    res.send(Buffer.from(pdf));
   }),
 );
 
@@ -198,6 +266,22 @@ router.put(
     const body = invoiceSchema.parse(req.body);
     const client = await prisma.client.findUnique({ where: { id: body.clientId } });
     if (!client) throw new ApiError(404, "Client not found");
+
+    // A live Square checkout charges the amount fixed when the link was
+    // created. Editing amounts would make the PDF and the charge disagree.
+    const pendingSquare = await prisma.payment.findFirst({
+      where: { invoiceId: existing.id, method: PaymentMethod.SQUARE, status: PaymentStatus.PENDING },
+    });
+    if (existing.squarePaymentLink || pendingSquare) {
+      const amountsChanged =
+        JSON.stringify(body.items) !== JSON.stringify(existing.items) ||
+        Number(body.taxRate) !== Number(existing.taxRate) ||
+        Number(body.discountAmount) !== Number(existing.discountAmount) ||
+        body.currency !== existing.currency;
+      if (amountsChanged) {
+        throw new ApiError(400, "Amounts cannot be changed while a Square payment link is active. Cancel the payment link first.");
+      }
+    }
 
     const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
 
@@ -273,21 +357,13 @@ router.post(
     if (!invoice) throw new ApiError(404, "Invoice not found");
     if (!invoice.client.email) throw new ApiError(400, "Client has no email address");
 
-    const company = (await prisma.setting.findUnique({ where: { key: "company" } }))?.value as
-      | { name?: string; email?: string; phone?: string; address?: string; website?: string }
-      | undefined;
+    const company = await companyDetails();
 
     const pdf = await renderInvoicePdf({
       invoice,
       client: invoice.client,
       brand: invoice.brand,
-      company: {
-        name: company?.name || env.branding.companyName,
-        email: company?.email || "",
-        phone: company?.phone || "",
-        address: company?.address || "",
-        website: company?.website || "",
-      },
+      company,
     });
 
     const subject = `Invoice ${invoice.number} from ${invoice.brand?.name || company?.name || env.branding.companyName}`;
@@ -333,25 +409,18 @@ router.get(
     });
     if (!invoice) throw new ApiError(404, "Invoice not found");
 
-    const company = (await prisma.setting.findUnique({ where: { key: "company" } }))?.value as
-      | { name?: string; email?: string; phone?: string; address?: string; website?: string }
-      | undefined;
+    const company = await companyDetails();
 
     const pdf = await renderInvoicePdf({
       invoice,
       client: invoice.client,
       brand: invoice.brand,
-      company: {
-        name: company?.name || env.branding.companyName,
-        email: company?.email || "",
-        phone: company?.phone || "",
-        address: company?.address || "",
-        website: company?.website || "",
-      },
+      company,
     });
 
+    const inline = req.query.inline === "1";
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${invoice.number}.pdf"`);
+    res.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${invoice.number}.pdf"`);
     res.send(Buffer.from(pdf));
   }),
 );

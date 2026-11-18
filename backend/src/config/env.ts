@@ -38,7 +38,9 @@ export const env = {
   jwtRefreshSecret: required("JWT_REFRESH_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1d",
   refreshExpiresIn: process.env.REFRESH_EXPIRES_IN || "30d",
-  inviteToken: process.env.INVITE_TOKEN || "dev-invite-token",
+  // The invite token grants signup access (the seed binds it to the admin role),
+  // so a predictable fallback must never be used in production.
+  inviteToken: required("INVITE_TOKEN", process.env.NODE_ENV === "production" ? undefined : "dev-invite-token"),
 
   branding: {
     portalName: process.env.PORTAL_NAME || "Billing Portal",

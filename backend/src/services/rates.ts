@@ -8,14 +8,19 @@ import { prisma } from "../lib/prisma";
  */
 
 export const BASE_CURRENCY = "USD";
-export const CURRENCIES = ["USD", "GBP", "EUR", "AUD", "CAD"];
+export const CURRENCIES = [
+  "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CHF", "CNY", "NZD",
+  "SEK", "NOK", "DKK", "PLN", "TRY", "SGD", "HKD", "INR",
+];
 const LIVE_TTL_MS = 6 * 60 * 60 * 1000;
-const RATES_API = "https://api.frankfurter.app/latest";
+const FRANKFURTER_API = "https://api.frankfurter.app/latest";
+const FALLBACK_API = "https://open.er-api.com/v6/latest/USD";
 
 interface LiveRates {
   base: string;
   date: string;
   fetchedAt: string;
+  provider: string;
   rates: Record<string, number>;
 }
 
@@ -31,23 +36,60 @@ async function setSetting(key: string, value: unknown) {
   await prisma.setting.upsert({ where: { key }, update: { value: v }, create: { key, value: v } });
 }
 
-/** Fetches fresh rates from Frankfurter and persists the snapshot. */
-export async function refreshLiveRates(): Promise<{ ok: boolean; error?: string }> {
+interface RateSnapshot {
+  date: string;
+  rates: Record<string, number>;
+}
+
+async function fromFrankfurter(): Promise<RateSnapshot> {
+  const to = CURRENCIES.filter((c) => c !== BASE_CURRENCY).join(",");
+  const res = await fetch(`${FRANKFURTER_API}?from=${BASE_CURRENCY}&to=${to}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Frankfurter returned ${res.status}`);
+  const body = (await res.json()) as { date: string; rates: Record<string, number> };
+  return { date: body.date, rates: body.rates };
+}
+
+async function fromFallback(): Promise<RateSnapshot> {
+  const res = await fetch(FALLBACK_API, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`fallback rate API returned ${res.status}`);
+  const body = (await res.json()) as { rates: Record<string, number>; time_last_update_unix?: number };
+  return {
+    date: body.time_last_update_unix ? new Date(body.time_last_update_unix * 1000).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    rates: body.rates || {},
+  };
+}
+
+/** Fetches fresh rates (ECB via Frankfurter, with a fallback) and persists the snapshot. */
+export async function refreshLiveRates(): Promise<{ ok: boolean; provider?: string; error?: string }> {
+  let snapshot: RateSnapshot | null = null;
+  let provider = "";
   try {
-    const to = CURRENCIES.filter((c) => c !== BASE_CURRENCY).join(",");
-    const res = await fetch(`${RATES_API}?from=${BASE_CURRENCY}&to=${to}`, {
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`rate api ${res.status}`);
-    const body = (await res.json()) as { base: string; date: string; rates: Record<string, number> };
-    const rates: Record<string, number> = { [BASE_CURRENCY]: 1 };
-    for (const c of CURRENCIES) if (body.rates[c] != null) rates[c] = Number(body.rates[c]);
-    const live: LiveRates = { base: body.base, date: body.date, fetchedAt: new Date().toISOString(), rates };
-    await setSetting("fx_live", live);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not fetch rates" };
+    snapshot = await fromFrankfurter();
+    provider = "Frankfurter (ECB)";
+  } catch {
+    try {
+      snapshot = await fromFallback();
+      provider = "ExchangeRate-API";
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Could not fetch rates" };
+    }
   }
+
+  const rates: Record<string, number> = { [BASE_CURRENCY]: 1 };
+  for (const c of CURRENCIES) {
+    if (c !== BASE_CURRENCY && snapshot.rates[c] != null && Number(snapshot.rates[c]) > 0) rates[c] = Number(snapshot.rates[c]);
+  }
+  const live: LiveRates = {
+    base: BASE_CURRENCY,
+    date: snapshot.date,
+    fetchedAt: new Date().toISOString(),
+    provider,
+    rates,
+  };
+  await setSetting("fx_live", live);
+  return { ok: true, provider };
 }
 
 async function getLive(): Promise<LiveRates | null> {
@@ -78,6 +120,7 @@ export async function getRates() {
     live: live?.rates || null,
     date: live?.date || null,
     updatedAt: live?.fetchedAt || null,
+    provider: live?.provider || null,
     overrides: active.reduce<Overrides>((a, k) => {
       a[k] = over[k];
       return a;
@@ -144,4 +187,27 @@ export async function convertInvoice(invoice: InvoiceLike, toCurrency: string): 
     total: await convertAmount(invoice.total, invoice.currency, toCurrency),
     items,
   };
+}
+
+let schedulerStarted = false;
+
+/** Keep the rate snapshot fresh even when nobody opens the app. */
+export function startRatesScheduler(): void {
+  if (schedulerStarted) return;
+  schedulerStarted = true;
+
+  const tick = async () => {
+    try {
+      const live = await getSetting<LiveRates>("fx_live");
+      if (live && Date.now() - new Date(live.fetchedAt).getTime() <= LIVE_TTL_MS) return;
+      const result = await refreshLiveRates();
+      console.log(result.ok ? `[rates] refreshed via ${result.provider}` : `[rates] refresh failed: ${result.error}`);
+    } catch (e) {
+      console.error("[rates] scheduler error", e);
+    }
+  };
+
+  void tick();
+  const timer = setInterval(tick, LIVE_TTL_MS);
+  timer.unref();
 }

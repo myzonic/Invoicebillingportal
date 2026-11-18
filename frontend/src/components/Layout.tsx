@@ -27,18 +27,18 @@ import Logo from "@/components/Logo";
 import { branding } from "@/config/branding";
 
 const NAV = [
-  { to: "/dashboard/main", label: "Overview", icon: LayoutDashboard },
-  { to: "/dashboard/clients", label: "Clients", icon: Users },
-  { to: "/dashboard/invoices", label: "Invoices", icon: FileText },
-  { to: "/dashboard/direct-invoice", label: "Direct Invoice", icon: Zap },
-  { to: "/dashboard/invoice-logs", label: "Invoice Logs", icon: Send },
-  { to: "/dashboard/brand-management", label: "Brands", icon: Boxes },
-  { to: "/dashboard/merchant-management", label: "Merchants", icon: Store },
-  { to: "/dashboard/merchant-records", label: "Merchant Records", icon: BadgeDollarSign },
-  { to: "/dashboard/user-management", label: "Users", icon: ShieldCheck },
-  { to: "/dashboard/roles", label: "Roles & Permissions", icon: KeyRound },
-  { to: "/dashboard/logs", label: "Logs", icon: ScrollText },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard/main", label: "Overview", icon: LayoutDashboard, module: "dashboard" },
+  { to: "/dashboard/clients", label: "Clients", icon: Users, module: "clients" },
+  { to: "/dashboard/invoices", label: "Invoices", icon: FileText, module: "invoices" },
+  { to: "/dashboard/direct-invoice", label: "Direct Invoice", icon: Zap, module: "invoices" },
+  { to: "/dashboard/invoice-logs", label: "Invoice Logs", icon: Send, module: "invoices" },
+  { to: "/dashboard/brand-management", label: "Brands", icon: Boxes, module: "brands" },
+  { to: "/dashboard/merchant-management", label: "Merchants", icon: Store, module: "merchants" },
+  { to: "/dashboard/merchant-records", label: "Merchant Records", icon: BadgeDollarSign, module: "merchants" },
+  { to: "/dashboard/user-management", label: "Users", icon: ShieldCheck, module: "users" },
+  { to: "/dashboard/roles", label: "Roles & Permissions", icon: KeyRound, module: "roles" },
+  { to: "/dashboard/logs", label: "Logs", icon: ScrollText, module: "logs" },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings, module: "settings", adminOnly: true },
 ];
 
 export default function Layout() {
@@ -48,6 +48,14 @@ export default function Layout() {
   const navigate = useNavigate();
   const user = useAppSelector((s) => s.auth.user);
   useMeQuery();
+
+  const isAdmin = ["admin", "super-admin"].includes(user?.role?.name?.toLowerCase() || "");
+  const canNav = (module: string, adminOnly = false) => {
+    if (adminOnly) return isAdmin;
+    if (isAdmin) return true;
+    return Boolean(user?.role?.permissions?.find((p) => p.module === module)?.canRead);
+  };
+  const visibleNav = NAV.filter((item) => canNav(item.module, item.adminOnly));
 
   const logout = () => {
     tokenStore.clear();
@@ -71,7 +79,7 @@ export default function Layout() {
           {!collapsed && <span className="truncate text-sm font-bold text-neutral-900">{branding.portalName}</span>}
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {NAV.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

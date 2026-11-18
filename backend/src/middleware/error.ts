@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { ZodError } from "zod";
 import { ApiError } from "../utils/ApiError";
 
 export function notFound(req: Request, _res: Response, next: NextFunction) {
@@ -8,6 +9,14 @@ export function notFound(req: Request, _res: Response, next: NextFunction) {
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({ success: false, message: err.message, details: err.details });
+  }
+
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      details: err.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+    });
   }
 
   // Prisma known errors

@@ -14,7 +14,13 @@ router.use(requireAuth);
 export const MODULE_NAMES = Object.values(ModuleName);
 
 const roleSchema = z.object({
-  name: z.string().min(2),
+  // rbac.ts grants a full bypass to these names; they must stay reserved.
+  name: z
+    .string()
+    .min(2)
+    .refine((n) => !["admin", "super-admin"].includes(n.toLowerCase().trim()), {
+      message: "This role name is reserved",
+    }),
   description: z.string().optional(),
   permissions: z.array(
     z.object({

@@ -1,6 +1,7 @@
 import { Request, Response, Router } from "express";
-import { LogAction } from "@prisma/client";
+import { LogAction, ModuleName } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { can } from "../middleware/rbac";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { audit } from "../utils/audit";
@@ -23,6 +24,7 @@ export function crudRouter(
 ) {
   const router = Router();
   const delegate = db[config.model];
+  const module = config.moduleName as ModuleName;
   const all = opts.getAll ?? true;
   const one = opts.getOne ?? true;
   const create = opts.create ?? true;
@@ -44,6 +46,7 @@ export function crudRouter(
   if (all) {
     router.get(
       "/",
+      can(module, "read"),
       asyncHandler(async (req: Request, res: Response) => {
         const { page, limit, where } = listParams(req);
         const [rows, total] = await Promise.all([
@@ -64,6 +67,7 @@ export function crudRouter(
   if (one) {
     router.get(
       "/:id",
+      can(module, "read"),
       asyncHandler(async (req, res) => {
         const row = await delegate.findUnique({ where: { id: req.params.id }, include: config.include });
         if (!row) throw new ApiError(404, `${config.model} not found`);
@@ -75,6 +79,7 @@ export function crudRouter(
   if (create) {
     router.post(
       "/",
+      can(module, "create"),
       asyncHandler(async (req, res) => {
         const data = config.parseBody ? config.parseBody(req.body) : req.body;
         const row = await delegate.create({ data });
@@ -94,6 +99,7 @@ export function crudRouter(
   if (update) {
     router.put(
       "/:id",
+      can(module, "update"),
       asyncHandler(async (req, res) => {
         const data = config.parseBody ? config.parseBody(req.body) : req.body;
         const row = await delegate.update({ where: { id: req.params.id }, data });
@@ -113,6 +119,7 @@ export function crudRouter(
   if (remove) {
     router.delete(
       "/:id",
+      can(module, "delete"),
       asyncHandler(async (req, res) => {
         await delegate.delete({ where: { id: req.params.id } });
         await audit({

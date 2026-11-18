@@ -10,6 +10,17 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          state: ["@reduxjs/toolkit", "react-redux"],
+          charts: ["recharts"],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     allowedHosts: true,

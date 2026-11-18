@@ -1,15 +1,17 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Eye } from "lucide-react";
 import {
   useBrandsQuery,
   useClientsQuery,
   useCreateInvoiceMutation,
   useInvoiceQuery,
+  useRatesQuery,
   useUpdateInvoiceMutation,
 } from "@/app/apiSlice";
 import { useCan } from "@/lib/permissions";
+import { api } from "@/lib/api";
 import { errorMessage, money, stripTags } from "@/lib/utils";
 import type { InvoiceItem, InvoiceStatus } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -20,6 +22,8 @@ import { Textarea, Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/table";
+import { Dialog } from "@/components/ui/dialog";
+import { PdfFrame } from "@/components/PdfFrame";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 const STATUSES = ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"];
@@ -35,6 +39,8 @@ export default function InvoiceForm() {
   const { data: invoiceData, isLoading: loadingInvoice } = useInvoiceQuery(id!, { skip: !id });
   const { data: clients } = useClientsQuery({ limit: 100 });
   const { data: brands } = useBrandsQuery({ limit: 100 });
+  const { data: ratesData } = useRatesQuery();
+  const currencyOptions = ratesData?.data?.currencies?.length ? ratesData.data.currencies : CURRENCIES;
   const [createInvoice, { isLoading: creating }] = useCreateInvoiceMutation();
   const [updateInvoice, { isLoading: updating }] = useUpdateInvoiceMutation();
 
@@ -51,6 +57,9 @@ export default function InvoiceForm() {
     status: "DRAFT",
   });
   const [items, setItems] = useState<InvoiceItem[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     if (invoiceData) {
@@ -87,29 +96,56 @@ export default function InvoiceForm() {
   const addItem = () => setItems((rows) => [...rows, { description: "", quantity: 1, unitPrice: 0 }]);
   const removeItem = (index: number) => setItems((rows) => rows.filter((_, i) => i !== index));
 
+  const buildPayload = () => ({
+    clientId: form.clientId,
+    brandId: form.brandId || undefined,
+    items,
+    taxRate: Number(form.taxRate),
+    discountAmount: Number(form.discountAmount),
+    currency: form.currency,
+    color: form.color || undefined,
+    notes: form.notes,
+    issueDate: new Date(form.issueDate).toISOString(),
+    dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
+    status: form.status as InvoiceStatus,
+  });
+
+  const validate = () => {
+    if (!form.clientId) {
+      toast.error("Select a client");
+      return false;
+    }
+    if (items.some((i) => !stripTags(i.description))) {
+      toast.error("Every line item needs a description");
+      return false;
+    }
+    return true;
+  };
+
+  const openPreview = async () => {
+    if (!validate()) return;
+    setPreviewing(true);
+    try {
+      const res = await api.post("/invoices/preview-pdf", buildPayload(), { responseType: "blob" });
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })));
+      setPreviewOpen(true);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.clientId) return toast.error("Select a client");
-    if (items.some((i) => !stripTags(i.description))) return toast.error("Every line item needs a description");
+    if (!validate()) return;
     try {
-      const payload = {
-        clientId: form.clientId,
-        brandId: form.brandId || undefined,
-        items,
-        taxRate: Number(form.taxRate),
-        discountAmount: Number(form.discountAmount),
-        currency: form.currency,
-        color: form.color || undefined,
-        notes: form.notes,
-        issueDate: new Date(form.issueDate).toISOString(),
-        dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
-        status: form.status as InvoiceStatus,
-      };
       if (isEdit) {
-        await updateInvoice({ id: id!, body: payload }).unwrap();
+        await updateInvoice({ id: id!, body: buildPayload() }).unwrap();
         toast.success("Invoice updated");
       } else {
-        await createInvoice(payload).unwrap();
+        await createInvoice(buildPayload()).unwrap();
         toast.success("Invoice created");
       }
       navigate("/dashboard/invoices");
@@ -122,7 +158,15 @@ export default function InvoiceForm() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title={isEdit ? "Edit Invoice" : "Add Invoice"} description={isEdit ? "Update invoice details" : "Create a new invoice"} />
+      <PageHeader
+        title={isEdit ? "Edit Invoice" : "Add Invoice"}
+        description={isEdit ? "Update invoice details and preview the PDF" : "Create a new invoice"}
+        action={
+          <Button type="button" variant="outline" onClick={openPreview} loading={previewing}>
+            <Eye className="size-4" /> Preview PDF
+          </Button>
+        }
+      />
       <form onSubmit={onSubmit} className="space-y-4">
         <Card>
           <CardContent className="space-y-4">
@@ -149,7 +193,7 @@ export default function InvoiceForm() {
               </Field>
               <Field label="Currency">
                 <Select value={form.currency} onChange={(e) => set("currency", e.target.value)}>
-                  {CURRENCIES.map((c) => (
+                  {currencyOptions.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
@@ -228,7 +272,7 @@ export default function InvoiceForm() {
                     <Field label={index === 0 ? "Qty" : ""}>
                       <Input
                         type="number"
-                        min={0}
+                        min={1}
                         value={item.quantity}
                         onChange={(e) => setItem(index, "quantity", Number(e.target.value))}
                       />
@@ -297,13 +341,17 @@ export default function InvoiceForm() {
           <Button type="button" variant="outline" onClick={() => navigate("/dashboard/invoices")}>
             Cancel
           </Button>
-          {can("create") && (
+          {can(isEdit ? "update" : "create") && (
             <Button type="submit" loading={creating || updating}>
               {isEdit ? "Save changes" : "Create invoice"}
             </Button>
           )}
         </div>
       </form>
+
+      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} title="Live PDF preview" description="Changes are not saved until you submit the form." className="max-w-4xl">
+        {previewUrl ? <PdfFrame src={previewUrl} /> : <Spinner />}
+      </Dialog>
     </div>
   );
 }

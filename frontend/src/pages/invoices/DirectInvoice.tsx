@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { useBrandsQuery, useClientsQuery, useCreateInvoiceMutation } from "@/app/apiSlice";
+import { useCan } from "@/lib/permissions";
 import { errorMessage, money } from "@/lib/utils";
 import type { InvoiceItem } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export default function DirectInvoice() {
   const navigate = useNavigate();
+  const can = useCan("invoices");
   const [params] = useSearchParams();
   const [clientId, setClientId] = useState(params.get("client") || "");
   const [description, setDescription] = useState("");
@@ -125,7 +127,7 @@ export default function DirectInvoice() {
               <Button type="button" variant="outline" onClick={() => navigate("/dashboard/invoices")}>
                 Cancel
               </Button>
-              <Button type="submit" loading={isLoading}>
+              <Button type="submit" loading={isLoading} disabled={!can("create")}>
                 Create invoice
               </Button>
             </div>

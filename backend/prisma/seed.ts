@@ -67,17 +67,16 @@ async function main() {
 
   const email = seedConfig.adminEmail.toLowerCase().trim();
   const password = process.env.SEED_ADMIN_PASSWORD || "ChangeMe123!";
-  const hashed = await bcrypt.hash(password, 10);
 
-  const admin = await prisma.user.upsert({
-    where: { email },
-    update: {
-      name: seedConfig.adminName,
-      password: hashed,
-      roleId: adminRole.id,
-    },
-    create: { email, password: hashed, name: seedConfig.adminName, roleId: adminRole.id },
-  });
+  // The seed runs on every container start. Never overwrite an existing
+  // admin's password here: doing so would silently revert a password change
+  // made through the app on the next deploy/restart.
+  const existingAdmin = await prisma.user.findUnique({ where: { email } });
+  const admin =
+    existingAdmin ||
+    (await prisma.user.create({
+      data: { email, password: await bcrypt.hash(password, 10), name: seedConfig.adminName, roleId: adminRole.id },
+    }));
 
   let seedBrand = await prisma.brand.findFirst({ where: { name: seedConfig.defaultBrandName } });
   if (!seedBrand) {
@@ -91,11 +90,13 @@ async function main() {
     });
   }
 
+  const inviteToken = process.env.INVITE_TOKEN || (process.env.NODE_ENV === "production" ? "" : "dev-invite-token");
+  if (!inviteToken) throw new Error("INVITE_TOKEN must be set in production");
   const invite = await prisma.inviteToken.upsert({
-    where: { token: process.env.INVITE_TOKEN || "dev-invite-token" },
+    where: { token: inviteToken },
     update: { roleId: adminRole.id, expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30) },
     create: {
-      token: process.env.INVITE_TOKEN || "dev-invite-token",
+      token: inviteToken,
       roleId: adminRole.id,
       expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
     },
@@ -117,13 +118,15 @@ async function main() {
   });
 
   console.log("Seed complete:");
-  console.log(`  admin email:   ${email}`);
-  console.log(`  admin password: ${password}`);
+  console.log(`  admin email:   ${email}${existingAdmin ? " (exists, left unchanged)" : " (created)"}`);
   console.log(`  admin role:    super-admin (${adminRole.id})`);
   console.log(`  staff role:    ${staffRole.id}`);
   console.log(`  default brand: ${seedBrand.id}`);
-  console.log(`  invite token:  ${invite.token}`);
-  console.log("  NOTE: change SEED_ADMIN_PASSWORD and INVITE_TOKEN in production.");
+  if (!existingAdmin) console.log("  initial password: value of SEED_ADMIN_PASSWORD (not logged for security).");
+  console.log(`  invite token configured: ${Boolean(invite.token)}`);
+  if (process.env.NODE_ENV === "production" && password === "ChangeMe123!") {
+    console.warn("  WARNING: default SEED_ADMIN_PASSWORD is in use. Set a strong value.");
+  }
 }
 
 main()

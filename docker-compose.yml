@@ -27,6 +27,9 @@ services:
       - "3000:3000"
     environment:
       PORT: "3000"
+      NODE_ENV: production
+      FRONTEND_DIST: /app/frontend/dist
+      UPLOAD_DIR: /app/backend/uploads
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/billing_portal?schema=public
       API_URL: ${API_URL:-https://localhost}
       CLIENT_URL: ${CLIENT_URL:-https://localhost}
@@ -48,7 +51,8 @@ services:
       SQUARE_APP_ID: ${SQUARE_APP_ID:-}
       SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:?set SQUARE_ACCESS_TOKEN}
       SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:?set SQUARE_LOCATION_ID}
-      SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:-}
+      SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:?set SQUARE_WEBHOOK_SIGNATURE_KEY}
+      SQUARE_DEFAULT_CURRENCY: ${SQUARE_DEFAULT_CURRENCY:-USD}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
@@ -59,6 +63,12 @@ services:
       MAX_UPLOAD_MB: "10"
     volumes:
       - uploads:/app/backend/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     depends_on:
       db:
         condition: service_healthy

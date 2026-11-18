@@ -20,6 +20,10 @@ const userSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+// Creating a user without a usable credential produces an account nobody can
+// log into (no invite email is sent), so require one explicitly.
+const createUserSchema = userSchema.extend({ password: z.string().min(8) });
+
 router.get(
   "/",
   can("users", "read"),
@@ -62,11 +66,11 @@ router.post(
   "/",
   can("users", "create"),
   asyncHandler(async (req, res) => {
-    const body = userSchema.parse(req.body);
+    const body = createUserSchema.parse(req.body);
     const email = body.email.toLowerCase().trim();
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) throw new ApiError(409, "A user with this email already exists");
-    const password = body.password || (await createTemporaryPassword());
+    const password = body.password;
     const user = await prisma.user.create({
       data: {
         name: body.name,
@@ -137,9 +141,5 @@ router.delete(
     res.json({ success: true, message: "Deleted" });
   }),
 );
-
-async function createTemporaryPassword() {
-  return `Temp${Math.random().toString(36).slice(2, 10)}!`;
-}
 
 export default router;

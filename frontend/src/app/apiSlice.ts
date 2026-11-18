@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { tokenStore } from "@/lib/api";
+import { refreshAccessToken, tokenStore } from "@/lib/api";
 import type { AuditLog, Brand, Client, CurrencyRates, DashboardReport, Invoice, InvoiceLog, Merchant, Paginated, Role, User } from "@/types";
 
 const baseUrl = import.meta.env.VITE_API_URL || "/api";
@@ -13,12 +13,30 @@ const baseQuery = fetchBaseQuery({
   },
 });
 
+// RTK Query calls must recover from an expired access token just like the
+// axios client does, otherwise every query fails after JWT_EXPIRES_IN and the
+// user is logged out even though the refresh token is still valid.
+const baseQueryWithReauth: typeof baseQuery = async (args, api, extraOptions) => {
+  let result = await baseQuery(args, api, extraOptions);
+  if (result.error?.status !== 401 || !tokenStore.refresh) return result;
+
+  try {
+    await refreshAccessToken();
+    result = await baseQuery(args, api, extraOptions);
+  } catch {
+    tokenStore.clear();
+    if (!window.location.pathname.startsWith("/login")) window.location.assign("/login");
+  }
+  return result;
+};
+
 export interface ListQuery {
   page?: number;
   limit?: number;
   search?: string;
   status?: string;
   clientId?: string;
+  module?: string;
 }
 
 function listParams(query: ListQuery) {
@@ -28,12 +46,13 @@ function listParams(query: ListQuery) {
   if (query.search) params.set("search", query.search);
   if (query.status) params.set("status", query.status);
   if (query.clientId) params.set("clientId", query.clientId);
+  if (query.module) params.set("module", query.module);
   return params.toString();
 }
 
 export const apiSlice = createApi({
   reducerPath: "api",
-  baseQuery,
+  baseQuery: baseQueryWithReauth,
   tagTypes: [
     "Auth",
     "Dashboard",
@@ -46,6 +65,7 @@ export const apiSlice = createApi({
     "Log",
     "InvoiceLog",
     "Settings",
+    "Rates",
   ],
   endpoints: (builder) => ({
     // ---- Auth ----
@@ -243,12 +263,15 @@ export const apiSlice = createApi({
     // ---- Currency rates ----
     rates: builder.query<{ data: CurrencyRates }, void>({
       query: () => "/rates",
+      providesTags: ["Rates"],
     }),
     refreshRates: builder.mutation<{ data: CurrencyRates }, void>({
       query: () => ({ url: "/rates/refresh", method: "POST" }),
+      invalidatesTags: ["Rates"],
     }),
     saveRates: builder.mutation<{ data: CurrencyRates }, { overrides: Record<string, number | null> }>({
       query: ({ overrides }) => ({ url: "/rates/overrides", method: "PUT", body: { overrides } }),
+      invalidatesTags: ["Rates"],
     }),
   }),
 });

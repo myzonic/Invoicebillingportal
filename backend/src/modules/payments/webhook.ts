@@ -13,7 +13,11 @@ const router = Router();
  */
 router.post("/square", async (req: Request, res: Response) => {
   try {
-    const signature = String(req.headers["x-square-hmac-sha256-signature"] || "");
+    // Square sends x-square-hmacsha256-signature (no hyphens around sha256).
+    // Accept the hyphenated variant too, for older/other Square clients.
+    const signature = String(
+      req.headers["x-square-hmacsha256-signature"] || req.headers["x-square-hmac-sha256-signature"] || "",
+    );
     const rawBody = (req as Request & { rawBody?: string }).rawBody || JSON.stringify(req.body);
     if (!verifyWebhookSignature(signature, rawBody)) {
       return res.status(401).json({ success: false, message: "Invalid signature" });

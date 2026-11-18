@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, Send, Copy, ExternalLink, CheckCircle2, Trash2, Download } from "lucide-react";
+import { ArrowLeft, Pencil, Send, Copy, ExternalLink, CheckCircle2, Trash2, Download, FilePenLine, Plus, RefreshCw } from "lucide-react";
 import {
   useDeleteInvoiceMutation,
   useInvoiceCheckoutMutation,
   useInvoiceQuery,
+  useRatesQuery,
   useSendInvoiceMutation,
+  useUpdateInvoiceMutation,
   useUpdateInvoiceStatusMutation,
 } from "@/app/apiSlice";
 import { useCan } from "@/lib/permissions";
@@ -18,24 +20,116 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR, Spinner, EmptyState } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { Dialog } from "@/components/ui/dialog";
+import { PdfFrame } from "@/components/PdfFrame";
+import { Input } from "@/components/ui/input";
+import { Field, Textarea } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
+import { RichTextEditor } from "@/components/ui/richText";
+import type { InvoiceItem } from "@/types";
 import { branding } from "@/config/branding";
+
+const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
 export default function InvoiceDetail() {
   const { id = "" } = useParams();
   const can = useCan("invoices");
   const { data, isLoading } = useInvoiceQuery(id);
+  const { data: ratesData } = useRatesQuery();
+  const currencyOptions = ratesData?.data?.currencies?.length ? ratesData.data.currencies : CURRENCIES;
   const [updateStatus, { isLoading: updating }] = useUpdateInvoiceStatusMutation();
   const [sendInvoice, { isLoading: sending }] = useSendInvoiceMutation();
   const [checkout, { isLoading: creatingLink }] = useInvoiceCheckoutMutation();
   const [deleteInvoice, { isLoading: deleting }] = useDeleteInvoiceMutation();
+  const [updateInvoice, { isLoading: savingPdf }] = useUpdateInvoiceMutation();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pdfEditOpen, setPdfEditOpen] = useState(false);
+  const [editPreviewUrl, setEditPreviewUrl] = useState("");
+  const [refreshingPreview, setRefreshingPreview] = useState(false);
+  const [pdfForm, setPdfForm] = useState({
+    currency: "USD",
+    color: "#111111",
+    notes: "",
+    taxRate: 0,
+    discountAmount: 0,
+    issueDate: "",
+    dueDate: "",
+    items: [] as InvoiceItem[],
+  });
+
+  useEffect(() => () => {
+    if (editPreviewUrl) URL.revokeObjectURL(editPreviewUrl);
+  }, [editPreviewUrl]);
 
   if (isLoading) return <Spinner />;
   const invoice = data?.data;
   if (!invoice) return <EmptyState title="Invoice not found" />;
 
   const items = (invoice.items || []) as { description: string; quantity: number; unitPrice: number }[];
+
+  const loadSavedPreview = async () => {
+    setRefreshingPreview(true);
+    try {
+      const res = await api.get(`/invoices/${id}/pdf?inline=1`, { responseType: "blob" });
+      setEditPreviewUrl(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })));
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setRefreshingPreview(false);
+    }
+  };
+
+  const openPdfEditor = async () => {
+    setPdfForm({
+      currency: invoice.currency,
+      color: invoice.color || "#111111",
+      notes: invoice.notes || "",
+      taxRate: Number(invoice.taxRate),
+      discountAmount: Number(invoice.discountAmount),
+      issueDate: invoice.issueDate.slice(0, 10),
+      dueDate: invoice.dueDate ? invoice.dueDate.slice(0, 10) : "",
+      items: items.map((i) => ({ description: i.description, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
+    });
+    setPdfEditOpen(true);
+    await loadSavedPreview();
+  };
+
+  const pdfPayload = () => ({
+    clientId: invoice.clientId,
+    brandId: invoice.brandId || undefined,
+    items: pdfForm.items,
+    taxRate: Number(pdfForm.taxRate),
+    discountAmount: Number(pdfForm.discountAmount),
+    currency: pdfForm.currency,
+    color: pdfForm.color || undefined,
+    notes: pdfForm.notes,
+    issueDate: new Date(pdfForm.issueDate).toISOString(),
+    dueDate: pdfForm.dueDate ? new Date(pdfForm.dueDate).toISOString() : undefined,
+    status: invoice.status,
+  });
+
+  const refreshEditedPreview = async () => {
+    setRefreshingPreview(true);
+    try {
+      const res = await api.post("/invoices/preview-pdf", pdfPayload(), { responseType: "blob" });
+      setEditPreviewUrl(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })));
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setRefreshingPreview(false);
+    }
+  };
+
+  const savePdfEdits = async () => {
+    try {
+      await updateInvoice({ id, body: pdfPayload() }).unwrap();
+      toast.success("PDF content saved and regenerated");
+      await loadSavedPreview();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
 
   const markPaid = async () => {
     try {
@@ -120,6 +214,11 @@ export default function InvoiceDetail() {
                 </Button>
               </Link>
             )}
+            {can("update") && invoice.status !== "PAID" && (
+              <Button variant="outline" onClick={openPdfEditor}>
+                <FilePenLine className="size-4" /> Edit PDF
+              </Button>
+            )}
             {can("update") && invoice.status === "DRAFT" && (
               <Button variant="outline" onClick={emailInvoice} loading={sending}>
                 <Send className="size-4" /> Email invoice
@@ -130,7 +229,7 @@ export default function InvoiceDetail() {
                 <Download className="size-4" /> PDF
               </Button>
             )}
-            {invoice.status !== "PAID" && (
+            {can("update") && invoice.status !== "PAID" && (
               <>
                 <Button variant="outline" onClick={createLink} loading={creatingLink}>
                   <ExternalLink className="size-4" /> Payment link
@@ -141,7 +240,7 @@ export default function InvoiceDetail() {
                 </Button>
               </>
             )}
-            {invoice.status !== "PAID" && (
+            {can("update") && invoice.status !== "PAID" && (
               <Button variant="success" onClick={markPaid} loading={updating}>
                 <CheckCircle2 className="size-4" /> Mark paid
               </Button>
@@ -279,6 +378,104 @@ export default function InvoiceDetail() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={pdfEditOpen}
+        onClose={() => setPdfEditOpen(false)}
+        title="Edit PDF content"
+        description="Fix mistakes here, refresh the preview, then save. The PDF is regenerated from these values."
+        className="max-w-6xl"
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+            <Field label="Notes">
+              <Textarea rows={2} value={pdfForm.notes} onChange={(e) => setPdfForm((f) => ({ ...f, notes: e.target.value }))} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Accent color">
+                <Input type="color" value={pdfForm.color} onChange={(e) => setPdfForm((f) => ({ ...f, color: e.target.value }))} className="h-10 p-1" />
+              </Field>
+              <Field label="Currency">
+                <Select value={pdfForm.currency} onChange={(e) => setPdfForm((f) => ({ ...f, currency: e.target.value }))}>
+                  {currencyOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Issue date">
+                <Input type="date" value={pdfForm.issueDate} onChange={(e) => setPdfForm((f) => ({ ...f, issueDate: e.target.value }))} />
+              </Field>
+              <Field label="Due date">
+                <Input type="date" value={pdfForm.dueDate} onChange={(e) => setPdfForm((f) => ({ ...f, dueDate: e.target.value }))} />
+              </Field>
+              <Field label="Tax rate (%)">
+                <Input type="number" min={0} max={100} step="0.01" value={pdfForm.taxRate} onChange={(e) => setPdfForm((f) => ({ ...f, taxRate: Number(e.target.value) }))} />
+              </Field>
+              <Field label="Discount amount">
+                <Input type="number" min={0} step="0.01" value={pdfForm.discountAmount} onChange={(e) => setPdfForm((f) => ({ ...f, discountAmount: Number(e.target.value) }))} />
+              </Field>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Line items</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPdfForm((f) => ({ ...f, items: [...f.items, { description: "", quantity: 1, unitPrice: 0 }] }))}
+                >
+                  <Plus className="size-4" /> Add
+                </Button>
+              </div>
+              {pdfForm.items.map((item, index) => (
+                <div key={index} className="mb-2 space-y-2 rounded-lg border border-border p-2">
+                  <RichTextEditor
+                    value={item.description}
+                    onChange={(html) => setPdfForm((f) => ({ ...f, items: f.items.map((it, i) => (i === index ? { ...it, description: html } : it)) }))}
+                  />
+                  <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) => setPdfForm((f) => ({ ...f, items: f.items.map((it, i) => (i === index ? { ...it, quantity: Number(e.target.value) } : it)) }))}
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={item.unitPrice}
+                      onChange={(e) => setPdfForm((f) => ({ ...f, items: f.items.map((it, i) => (i === index ? { ...it, unitPrice: Number(e.target.value) } : it)) }))}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setPdfForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== index) }))}
+                      disabled={pdfForm.items.length === 1}
+                    >
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={refreshEditedPreview} loading={refreshingPreview}>
+                <RefreshCw className="size-4" /> Refresh preview
+              </Button>
+              <Button type="button" onClick={savePdfEdits} loading={savingPdf}>
+                Save &amp; regenerate PDF
+              </Button>
+            </div>
+          </div>
+          <div>{editPreviewUrl ? <PdfFrame src={editPreviewUrl} /> : <Spinner />}</div>
+        </div>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmOpen}

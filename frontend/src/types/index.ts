@@ -161,6 +161,7 @@ export interface CurrencyRates {
   live: Record<string, number> | null;
   date: string | null;
   updatedAt: string | null;
+  provider: string | null;
   overrides: Record<string, number>;
   source: "live" | "override" | "mixed" | "none";
 }
