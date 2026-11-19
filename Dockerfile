@@ -21,7 +21,8 @@ FROM node:20-alpine AS runtime
 ENV NODE_ENV=production \
     PORT=3000 \
     FRONTEND_DIST=/app/frontend/dist \
-    UPLOAD_DIR=/app/backend/uploads
+    UPLOAD_DIR=/app/backend/uploads \
+    PATH="/app/backend/node_modules/.bin:${PATH}"
 # openssl/libc6-compat: Prisma engines. tini: forwards signals to the Node process.
 RUN apk add --no-cache openssl libc6-compat tini
 WORKDIR /app/backend
