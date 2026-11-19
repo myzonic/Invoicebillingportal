@@ -48,7 +48,7 @@ export default function InvoiceForm() {
     clientId: params.get("client") || "",
     brandId: "",
     currency: "USD",
-    color: "#111111",
+    color: "",
     taxRate: 0,
     discountAmount: 0,
     notes: "",
@@ -70,7 +70,7 @@ export default function InvoiceForm() {
         clientId: inv.clientId,
         brandId: inv.brandId || "",
         currency: inv.currency,
-        color: inv.color || "#111111",
+        color: inv.color || "",
         taxRate: Number(inv.taxRate),
         discountAmount: Number(inv.discountAmount),
         notes: inv.notes || "",
@@ -219,16 +219,16 @@ export default function InvoiceForm() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Brand color" hint="Shown on the client's invoice, checkout and PDF">
+              <Field label="Override color" hint="Leave blank to use the brand color on the client's invoice, checkout and PDF">
                 <div className="flex items-center gap-2">
                   <label
                     className="relative inline-flex size-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border shadow-sm"
-                    style={{ background: form.color }}
+                    style={{ background: form.color || "#111111" }}
                     title="Pick a custom color"
                   >
                     <input
                       type="color"
-                      value={form.color}
+                      value={form.color || "#111111"}
                       onChange={(e) => set("color", e.target.value)}
                       className="absolute inset-0 size-full cursor-pointer opacity-0"
                     />
@@ -245,6 +245,11 @@ export default function InvoiceForm() {
                         aria-label={`Use color ${c}`}
                       />
                     ))}
+                    {form.color && (
+                      <button type="button" onClick={() => set("color", "")} className="text-xs text-muted-foreground underline">
+                        Use brand default
+                      </button>
+                    )}
                   </div>
                 </div>
               </Field>

@@ -53,6 +53,8 @@ export interface Brand {
   country?: string | null;
   website?: string | null;
   logoUrl?: string | null;
+  /** Brand accent color; overrides per-invoice color on client-facing pages/PDF. */
+  color?: string | null;
   currency: string;
   email?: string;
   phone?: string;

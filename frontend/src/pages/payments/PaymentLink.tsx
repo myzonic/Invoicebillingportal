@@ -18,13 +18,15 @@ export default function PaymentLink() {
   const inv = data.data;
   const brand = inv.brand;
   const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number }[];
-  const accent = brandColor(inv.color);
+  const accent = brandColor(brand?.color || inv.color);
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);
   const businessName = brand?.businessName || brand?.name || branding.defaultBrandName;
   const businessLines = [brand?.address, [brand?.email, brand?.phone].filter(Boolean).join(" · ")]
     .filter(Boolean)
     .join("\n");
+  const headerLines = (brand?.pdfHeader || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const footerText = brand?.pdfFooter?.trim() || `Thank you for your business. ${businessName}`;
 
   return (
     <div
@@ -65,6 +67,11 @@ export default function PaymentLink() {
           <div className="mb-4 text-center">
             <p className="text-sm font-semibold text-neutral-900">{businessName}</p>
             {businessLines && <p className="mt-0.5 whitespace-pre-line text-xs text-neutral-500">{businessLines}</p>}
+            {headerLines.length > 0 && (
+              <p className="mt-1 whitespace-pre-line text-xs" style={{ color: accentDark }}>
+                {headerLines.join("\n")}
+              </p>
+            )}
           </div>
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -150,6 +157,8 @@ export default function PaymentLink() {
               <Lock className="size-4" /> Pay now <ArrowRight className="size-4" />
             </button>
           )}
+
+          <p className="mt-4 whitespace-pre-line text-center text-xs text-neutral-500">{footerText}</p>
 
           <a
             href={`/api/payments/public/${inv.publicToken || id}/pdf`}

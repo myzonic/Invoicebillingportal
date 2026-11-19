@@ -115,10 +115,16 @@ export default function SquareCheckout() {
   const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number }[];
   const brand = inv.brand;
   const company = inv.company || { name: brand?.name || branding.companyName, email: "", phone: "", address: "", website: "" };
-  const accent = brandColor(inv.color);
+  const brandName = brand?.businessName || brand?.name || company.name;
+  const accent = brandColor(brand?.color || inv.color);
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);
   const inputBorder = { borderColor: rgba(accent, 0.5) };
+  const headerLines = (brand?.pdfHeader || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const footerText = brand?.pdfFooter?.trim() || `Thank you for your business. ${brandName}`;
+  const footerContact = [brand?.website || company.website, brand?.email || company.email]
+    .filter(Boolean)
+    .join("  |  ");
 
   const refreshQuote = async () => {
     try {
@@ -222,12 +228,17 @@ export default function SquareCheckout() {
                   color: "transparent",
                 }}
               >
-                {brand?.businessName || brand?.name || company.name}
+                {brandName}
               </div>
               <div className="mt-1 text-xs text-white/75">{brand?.address || company.address}</div>
               <div className="text-xs text-white/75">
                 {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
               </div>
+              {headerLines.length > 0 && (
+                <div className="mt-1 whitespace-pre-line text-xs" style={{ color: shade(accent, 0.4) }}>
+                  {headerLines.join("\n")}
+                </div>
+              )}
             </div>
             <div className="text-right">
               <div
@@ -318,14 +329,12 @@ export default function SquareCheckout() {
           </div>
 
           <div className="bg-[#171719] px-6 py-4 sm:px-10">
-            <p className="text-sm text-white/75">Thank you for your business. {company.name}</p>
-            {company.website || company.email ? (
+            <p className="whitespace-pre-line text-sm text-white/75">{footerText}</p>
+            {footerContact && (
               <p className="mt-1 text-xs" style={{ color: shade(accent, 0.35) }}>
-                {company.website}
-                {company.website && company.email ? "  |  " : ""}
-                {company.email}
+                {footerContact}
               </p>
-            ) : null}
+            )}
           </div>
         </Card>
 

@@ -292,7 +292,8 @@ export async function renderInvoicePdf({ invoice, client, brand, company }: Invo
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
   const boldItalic = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
-  const accentMid = invoice.color ? hexToC(invoice.color) : GOLD_MID;
+  const accentSource = brand?.color || invoice.color;
+  const accentMid = accentSource ? hexToC(accentSource) : GOLD_MID;
   const accentLight = lighten(accentMid, 0.45);
   const runFont = (b: boolean, i: boolean) => (b && i ? boldItalic : b ? bold : i ? italic : font);
   const { width, height } = page.getSize();
@@ -337,7 +338,7 @@ export async function renderInvoicePdf({ invoice, client, brand, company }: Invo
   rightText(`# ${invoice.number}`, right, height - bandH + 14, font, 11, accentMid);
 
   // Brand identity / editable header text (falls back to company details)
-  const brandName = brand?.name || company.name;
+  const brandName = brand?.businessName || brand?.name || company.name;
   const brandEmail = brand?.email || company.email;
   const brandPhone = brand?.phone || company.phone;
   const headerLines: Array<{ t: string; f: PDFFont; s: number; c: C }> = [];
@@ -466,16 +467,21 @@ export async function renderInvoicePdf({ invoice, client, brand, company }: Invo
   const footH = 58;
   page.drawRectangle({ x: 0, y: 0, width, height: footH, color: col(BLACK) });
   page.drawRectangle({ x: 0, y: footH, width, height: 3, color: col(accentMid) });
-  const footText = brand?.pdfFooter?.trim() || `Thank you for your business. ${brand?.name || company.name}`;
+  const footText = brand?.pdfFooter?.trim() || `Thank you for your business. ${brandName}`;
   const footLines = wrapText(footText, right - margin - 180, font, 10);
-  const footContact = [brandEmail || company.email, brandPhone || company.phone, brand?.address || company.address]
+  const footContact = [
+    brand?.website || company.website,
+    brandEmail || company.email,
+    brandPhone || company.phone,
+    brand?.address || company.address,
+  ]
     .filter(Boolean)
     .join("   |   ");
   text(san(footLines[0] || ""), margin, 38, font, 10, WHITE);
   if (footLines[1]) text(san(footLines[1]), margin, 24, font, 10, WHITE);
   const contactY = footLines[1] ? 10 : 24;
   if (footContact) text(fitText(san(footContact), right - margin - 180, font, 9), margin, contactY, font, 9, accentLight);
-  rightText("MYZONIC  FINANCE  &  BILLING", right, 24, bold, 9, accentMid);
+  rightText(brandName.toUpperCase(), right, 24, bold, 9, accentMid);
 
   return doc.save();
 }

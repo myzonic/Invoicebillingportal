@@ -13,7 +13,8 @@ export default function PaymentResult({ variant }: { variant: "success" | "cance
   const { data } = usePublicInvoiceQuery(invoiceId || "", { skip: !invoiceId });
   const brand = data?.data?.brand;
   const businessName = brand?.businessName || brand?.name;
-  const accent = brandColor(params.get("color"));
+  const accent = brandColor(brand?.color || params.get("color"));
+  const footerText = brand?.pdfFooter?.trim() || (businessName ? `Thank you for your business. ${businessName}` : "");
   const pdfHref = invoiceId ? `/api/payments/public/${invoiceId}/pdf` : null;
   return (
     <div
@@ -58,6 +59,7 @@ export default function PaymentResult({ variant }: { variant: "success" | "cance
               ? "Thank you! Your payment has been received. A receipt is on its way to your email."
               : "You cancelled the payment. No charge was made. You can try again at any time."}
           </p>
+          {footerText && <p className="mt-3 whitespace-pre-line text-xs text-neutral-500">{footerText}</p>}
           {success && pdfHref && (
             <a
               href={pdfHref}

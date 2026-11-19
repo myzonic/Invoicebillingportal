@@ -35,6 +35,13 @@ router.use(
           if (error) throw new ApiError(400, error);
           data.paymentSubdomain = subdomain;
         }
+        if ("color" in data) {
+          const color = String(data.color || "").trim();
+          if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+            throw new ApiError(400, "Brand color must be a hex value like #111111");
+          }
+          data.color = color || null;
+        }
         for (const key of ["isDefault", "isActive", "paymentEnabled"] as const) {
           if (key in data) data[key] = data[key] === true || data[key] === "true" || data[key] === "yes" || data[key] === 1;
         }

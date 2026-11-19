@@ -107,6 +107,8 @@ model Brand {
   country          String?
   website          String?
   logoUrl          String?
+  // Brand accent color used by client-facing invoice pages and PDFs.
+  color            String?
   currency         String   @default("USD")
   email            String?
   phone            String?

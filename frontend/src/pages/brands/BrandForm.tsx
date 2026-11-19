@@ -19,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/table";
 
 const FALLBACK_CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
+const BRAND_COLORS = ["#111111", "#374151", "#2563eb", "#0d9488", "#16a34a", "#7c3aed", "#dc2626", "#db2777", "#f97316"];
 const DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const SUBDOMAIN_RE = /^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -60,6 +61,7 @@ export default function BrandForm() {
     email: "",
     phone: "",
     address: "",
+    color: "#111111",
     pdfHeader: "",
     pdfFooter: "",
     isDefault: false,
@@ -85,6 +87,7 @@ export default function BrandForm() {
         email: b.email || "",
         phone: b.phone || "",
         address: b.address || "",
+        color: b.color || "#111111",
         pdfHeader: b.pdfHeader || "",
         pdfFooter: b.pdfFooter || "",
         isDefault: b.isDefault,
@@ -217,6 +220,36 @@ export default function BrandForm() {
               </div>
             </Field>
 
+            <Field label="Brand color" hint="Applied to this brand's client invoice, checkout and PDF">
+              <div className="flex items-center gap-2">
+                <label
+                  className="relative inline-flex size-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border shadow-sm"
+                  style={{ background: form.color }}
+                  title="Pick a custom color"
+                >
+                  <input
+                    type="color"
+                    value={form.color}
+                    onChange={(e) => set("color", e.target.value)}
+                    className="absolute inset-0 size-full cursor-pointer opacity-0"
+                  />
+                  <span className="text-[10px] font-bold text-white/90">▼</span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {BRAND_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => set("color", c)}
+                      className={`size-6 rounded-full border transition-transform hover:scale-110 ${form.color === c ? "ring-2 ring-foreground ring-offset-2" : "border-black/10"}`}
+                      style={{ background: c }}
+                      aria-label={`Use color ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </Field>
+
             <div className="space-y-1 pt-2">
               <h3 className="text-sm font-semibold">Domain & payment link</h3>
               <p className="text-xs text-muted-foreground">
@@ -291,7 +324,7 @@ export default function BrandForm() {
             <div className="space-y-1 pt-2">
               <h3 className="text-sm font-semibold">PDF customization</h3>
               <p className="text-xs text-muted-foreground">
-                Shown on the invoice PDF. Header appears next to the logo; footer replaces the default thank-you line.
+                Shown on the client-facing invoice page, secure checkout and PDF. Header appears with the brand details; footer replaces the default thank-you line.
               </p>
             </div>
             <Field label="PDF header text (one line per row)">
