@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useBrandsQuery, useClientsQuery, useCreateInvoiceMutation } from "@/app/apiSlice";
 import { useCan } from "@/lib/permissions";
@@ -18,24 +18,46 @@ export default function DirectInvoice() {
   const can = useCan("invoices");
   const [params] = useSearchParams();
   const [clientId, setClientId] = useState(params.get("client") || "");
+  const [brandId, setBrandId] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [color, setColor] = useState("#111111");
+  const [color, setColor] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
   const { data: clients } = useClientsQuery({ limit: 100 });
   const { data: brands } = useBrandsQuery({ limit: 100 });
   const [createInvoice, { isLoading }] = useCreateInvoiceMutation();
 
+  useEffect(() => {
+    if (brandId || !brands?.data?.length) return;
+    const preferred =
+      brands.data.find((b) => b.isActive !== false && b.isDefault) ||
+      brands.data.find((b) => b.isActive !== false) ||
+      brands.data[0];
+    if (preferred) {
+      setBrandId(preferred.id);
+      setCurrency(preferred.currency || "USD");
+    }
+  }, [brands?.data, brandId]);
+
+  const changeBrand = (id: string) => {
+    const next = brands?.data.find((b) => b.id === id);
+    setBrandId(id);
+    setCurrency(next?.currency || "USD");
+    setColor("");
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!clientId) return toast.error("Select a client");
+    if (!brandId) return toast.error("Select a brand");
     if (!description || Number(amount) <= 0) return toast.error("Enter a description and amount");
     const items: InvoiceItem[] = [{ description, quantity: 1, unitPrice: Number(amount) }];
     try {
       await createInvoice({
         clientId,
+        brandId,
         items,
         currency,
         color: color || undefined,
@@ -66,6 +88,18 @@ export default function DirectInvoice() {
                 ))}
               </Select>
             </Field>
+            <Field label="Brand / Company" hint="Client-facing details are read from this brand" required>
+              <Select value={brandId} onChange={(e) => changeBrand(e.target.value)} required>
+                <option value="" disabled>
+                  Select a brand
+                </option>
+                {brands?.data.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Field label="Description" required>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Web development retainer" required />
             </Field>
@@ -91,16 +125,16 @@ export default function DirectInvoice() {
                 <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
               </Field>
             </div>
-            <Field label="Brand color" hint="Shown on the client's invoice, checkout and PDF">
+            <Field label="Override color" hint="Leave blank to use the brand color on the client's invoice, checkout and PDF">
               <div className="flex items-center gap-2">
                 <label
                   className="relative inline-flex size-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border shadow-sm"
-                  style={{ background: color }}
+                  style={{ background: color || "#111111" }}
                   title="Pick a custom color"
                 >
                   <input
                     type="color"
-                    value={color}
+                    value={color || "#111111"}
                     onChange={(e) => setColor(e.target.value)}
                     className="absolute inset-0 size-full cursor-pointer opacity-0"
                   />
@@ -117,6 +151,11 @@ export default function DirectInvoice() {
                       aria-label={`Use color ${c}`}
                     />
                   ))}
+                  {color && (
+                    <button type="button" onClick={() => setColor("")} className="text-xs text-muted-foreground underline">
+                      Use brand default
+                    </button>
+                  )}
                 </div>
               </div>
             </Field>

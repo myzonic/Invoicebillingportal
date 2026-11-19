@@ -82,8 +82,26 @@ export default function InvoiceForm() {
     }
   }, [invoiceData]);
 
+  // New invoices always inherit the default (or first active) brand, so the
+  // client-facing page/PDF is branded even if the user never touches this field.
+  useEffect(() => {
+    if (isEdit || form.brandId || !brands?.data?.length) return;
+    const preferred =
+      brands.data.find((b) => b.isActive !== false && b.isDefault) ||
+      brands.data.find((b) => b.isActive !== false) ||
+      brands.data[0];
+    if (preferred) {
+      setForm((f) => ({ ...f, brandId: preferred.id, currency: preferred.currency || f.currency }));
+    }
+  }, [brands?.data, form.brandId, isEdit]);
+
   const set = (key: keyof typeof form, value: unknown) => setForm((f) => ({ ...f, [key]: value }));
   const selectedBrand = brands?.data.find((b) => b.id === form.brandId) || brands?.data.find((b) => b.isDefault);
+
+  const changeBrand = (brandId: string) => {
+    const next = brands?.data.find((b) => b.id === brandId);
+    setForm((f) => ({ ...f, brandId, currency: next?.currency || f.currency, color: "" }));
+  };
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0);
@@ -116,6 +134,10 @@ export default function InvoiceForm() {
   const validate = () => {
     if (!form.clientId) {
       toast.error("Select a client");
+      return false;
+    }
+    if (!form.brandId) {
+      toast.error("Select a brand");
       return false;
     }
     if (items.some((i) => !stripTags(i.description))) {
@@ -199,10 +221,12 @@ export default function InvoiceForm() {
               </Field>
               <Field
                 label="Brand / Company"
-                hint={selectedBrand?.paymentDomain ? `Payment domain: ${selectedBrand.paymentDomain}` : "Select a brand to set its payment domain"}
+                hint="Client-facing invoice, checkout and PDF details are read from this brand"
               >
-                <Select value={form.brandId} onChange={(e) => set("brandId", e.target.value)}>
-                  <option value="">Default brand</option>
+                <Select value={form.brandId} onChange={(e) => changeBrand(e.target.value)}>
+                  <option value="" disabled>
+                    Select a brand
+                  </option>
                   {brands?.data.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
@@ -210,6 +234,30 @@ export default function InvoiceForm() {
                   ))}
                 </Select>
               </Field>
+              {selectedBrand && (
+                <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs">
+                  <p className="mb-1 font-semibold text-foreground">Brand details used on the client invoice</p>
+                  <p className="font-medium">{selectedBrand.businessName || selectedBrand.name}</p>
+                  {selectedBrand.address && <p className="whitespace-pre-line text-muted-foreground">{selectedBrand.address}</p>}
+                  {[selectedBrand.email, selectedBrand.phone].filter(Boolean).length > 0 && (
+                    <p className="text-muted-foreground">
+                      {[selectedBrand.email, selectedBrand.phone].filter(Boolean).join("  |  ")}
+                    </p>
+                  )}
+                  {selectedBrand.pdfHeader && (
+                    <p className="mt-1 whitespace-pre-line text-muted-foreground">Header: {selectedBrand.pdfHeader}</p>
+                  )}
+                  {selectedBrand.pdfFooter && (
+                    <p className="mt-1 whitespace-pre-line text-muted-foreground">Footer: {selectedBrand.pdfFooter}</p>
+                  )}
+                  <p className="mt-1 font-medium" style={{ color: selectedBrand.color || undefined }}>
+                    Color: {selectedBrand.color || "default"}
+                  </p>
+                  {selectedBrand.paymentDomain && (
+                    <p className="mt-1 text-muted-foreground">Pay link domain: {selectedBrand.paymentDomain}</p>
+                  )}
+                </div>
+              )}
               <Field label="Currency">
                 <Select value={form.currency} onChange={(e) => set("currency", e.target.value)}>
                   {currencyOptions.map((c) => (

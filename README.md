@@ -78,7 +78,7 @@ e.g. https://pay.crystalwebsites.com.au/invoice/9f2c…(48 chars)
 
 The token is random (`randomBytes(24)`) and stored on the invoice, so the URL never changes — even if the invoice number, amount or brand details are edited later. Existing invoices were backfilled with tokens in the migration. Legacy numeric IDs still resolve on the same route.
 
-**Managing brands:** go to **Brands / Companies** in the portal. For each brand set: name, business/legal name, logo, primary domain, payment subdomain (default `pay`), country, website, currency, contact details, active flag and online-payment toggle. The **Generated payment domain** (`<subdomain>.<domain>`) is shown live in the form. Invoices belong to a brand, and the list can be filtered by brand via the "view brand invoices" action. The public page renders that brand's logo, business name and contact details — nothing is hard-coded to one company.
+**Managing brands:** go to **Brands / Companies** in the portal. For each brand set: name, business/legal name, logo, brand color, primary domain, payment subdomain (default `pay`), country, website, currency, contact details, PDF header/footer, active flag and online-payment toggle. The **Generated payment domain** (`<subdomain>.<domain>`) is shown live in the form. Every new invoice is automatically assigned a brand (explicit choice, client brand, or default brand), and the list can be filtered by brand via the "view brand invoices" action. The client-facing invoice, checkout and PDF read the brand's logo, business name, contact details, header/footer and color live — nothing is hard-coded to one company, and adding a new brand works without code changes.
 
 ### DNS + TLS for `pay.<domain>` (external to the app)
 

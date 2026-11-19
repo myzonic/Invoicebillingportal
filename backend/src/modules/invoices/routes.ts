@@ -28,7 +28,7 @@ const invoiceSchema = z.object({
   items: z.array(itemSchema).min(1),
   taxRate: z.number().min(0).max(100).default(0),
   discountAmount: z.number().nonnegative().default(0),
-  currency: z.string().min(3).max(3).default("USD"),
+  currency: z.string().min(3).max(3).optional(),
   color: z.string().optional(),
   notes: z.string().optional(),
   issueDate: z.coerce.date(),
@@ -68,16 +68,22 @@ async function nextInvoiceNumber(brandInitials: string) {
   return `INV-${brandInitials.toUpperCase()}-${year}-${String(seq).padStart(3, "0")}`;
 }
 
-async function brandInitialsFor(brandId: string | undefined, client: { brandId: string | null }) {
-  if (brandId) {
-    const brand = await prisma.brand.findUnique({ where: { id: brandId } });
-    return initials(brand?.name || "MZ");
-  }
-  if (client.brandId) {
-    const brand = await prisma.brand.findUnique({ where: { id: client.brandId } });
-    return initials(brand?.name || "MZ");
-  }
-  return "MZ";
+/** Every invoice belongs to a brand: explicit choice, client brand, or default brand. */
+async function resolveBrand(
+  requested: string | undefined,
+  clientBrandId: string | null,
+  fallbackBrandId?: string | null,
+) {
+  const brandId =
+    requested ||
+    fallbackBrandId ||
+    clientBrandId ||
+    (await prisma.brand.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true } }))?.id ||
+    (await prisma.brand.findFirst({ where: { isActive: true }, select: { id: true } }))?.id;
+  if (!brandId) throw new ApiError(400, "Create an active brand before creating invoices");
+  const brand = await prisma.brand.findUnique({ where: { id: brandId } });
+  if (!brand) throw new ApiError(400, "Selected brand no longer exists");
+  return brand;
 }
 
 function initials(name: string) {
@@ -169,13 +175,15 @@ router.post(
     if (!client) throw new ApiError(404, "Client not found");
 
     const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
-    const initials = await brandInitialsFor(body.brandId, client);
+    const brand = await resolveBrand(body.brandId, client.brandId);
+    const currency = body.currency || brand.currency || "USD";
+    const initialsForNumber = initials(brand.name);
 
     // Two concurrent creations can read the same sequence value. Retry with a
     // fresh number if the unique constraint on `number` rejects our insert.
     let invoice: Prisma.InvoiceGetPayload<{ include: { client: true; brand: true } }> | null = null;
     for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
-      const number = await nextInvoiceNumber(initials);
+      const number = await nextInvoiceNumber(initialsForNumber);
       try {
         invoice = await prisma.invoice.create({
           data: {
@@ -183,14 +191,16 @@ router.post(
             // 192 bits of entropy: stable and non-guessable for public links.
             publicToken: randomBytes(24).toString("hex"),
             clientId: body.clientId,
-            brandId: body.brandId || client.brandId || undefined,
+            brandId: brand.id,
             items: body.items,
             subtotal,
             taxRate: body.taxRate,
             taxAmount,
             discountAmount: body.discountAmount,
             total,
-            currency: body.currency,
+            currency,
+            // Brand colour is read live from the brand, so invoices inherit it
+            // without copying a stale value at creation time.
             color: body.color || undefined,
             notes: body.notes,
             issueDate: body.issueDate,
@@ -226,8 +236,8 @@ router.post(
     const body = invoiceSchema.parse(req.body);
     const client = await prisma.client.findUnique({ where: { id: body.clientId } });
     if (!client) throw new ApiError(404, "Client not found");
-    const brandId = body.brandId || client.brandId;
-    const brand = brandId ? await prisma.brand.findUnique({ where: { id: brandId } }) : null;
+    const brand = await resolveBrand(body.brandId, client.brandId);
+    const currency = body.currency || brand.currency || "USD";
     const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
 
     const preview = {
@@ -241,8 +251,8 @@ router.post(
       taxAmount,
       discountAmount: body.discountAmount,
       total,
-      currency: body.currency,
-      color: body.color || null,
+      currency,
+      color: body.color || brand.color || null,
       status: body.status || InvoiceStatus.DRAFT,
       notes: body.notes || null,
       issueDate: body.issueDate,
@@ -272,6 +282,8 @@ router.put(
     const body = invoiceSchema.parse(req.body);
     const client = await prisma.client.findUnique({ where: { id: body.clientId } });
     if (!client) throw new ApiError(404, "Client not found");
+    const brand = await resolveBrand(body.brandId, client.brandId, existing.brandId);
+    const currency = body.currency || existing.currency || brand.currency || "USD";
 
     // A live Square checkout charges the amount fixed when the link was
     // created. Editing amounts would make the PDF and the charge disagree.
@@ -283,7 +295,7 @@ router.put(
         JSON.stringify(body.items) !== JSON.stringify(existing.items) ||
         Number(body.taxRate) !== Number(existing.taxRate) ||
         Number(body.discountAmount) !== Number(existing.discountAmount) ||
-        body.currency !== existing.currency;
+        currency !== existing.currency;
       if (amountsChanged) {
         throw new ApiError(400, "Amounts cannot be changed while a Square payment link is active. Cancel the payment link first.");
       }
@@ -295,14 +307,14 @@ router.put(
       where: { id: req.params.id },
       data: {
         clientId: body.clientId,
-        brandId: body.brandId || client.brandId || undefined,
+        brandId: brand.id,
         items: body.items,
         subtotal,
         taxRate: body.taxRate,
         taxAmount,
         discountAmount: body.discountAmount,
         total,
-        currency: body.currency,
+        currency,
         color: body.color || undefined,
         notes: body.notes,
         issueDate: body.issueDate,
