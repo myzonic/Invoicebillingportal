@@ -4,6 +4,7 @@ import helmet from "helmet";
 import path from "node:path";
 import { env } from "./config/env";
 import { notFound, errorHandler } from "./middleware/error";
+import { isOriginAllowed } from "./services/corsOrigins";
 
 import authRoutes from "./modules/auth/routes";
 import userRoutes from "./modules/users/routes";
@@ -41,7 +42,15 @@ export function createApp(): Express {
   );
   app.use(
     cors({
-      origin: [env.clientUrl, env.apiUrl].filter(Boolean),
+      // White-label payment hosts (pay.<brand-domain>) are created at runtime,
+      // so the allowlist is resolved dynamically. See services/corsOrigins.ts.
+      origin: async (origin, callback) => {
+        try {
+          callback(null, await isOriginAllowed(origin));
+        } catch {
+          callback(null, false);
+        }
+      },
       credentials: true,
     }),
   );

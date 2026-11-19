@@ -27,7 +27,6 @@ import { Field, Textarea } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { RichTextEditor } from "@/components/ui/richText";
 import type { InvoiceItem } from "@/types";
-import { branding } from "@/config/branding";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
@@ -176,11 +175,18 @@ export default function InvoiceDetail() {
     }
   };
 
+  const paymentLink = invoice.permalink || "";
+  const paymentDomain = invoice.paymentDomain || invoice.brand?.paymentDomain || "";
+
   const copyLink = async () => {
-    const url = invoice.squarePaymentLink || `${branding.paymentUrl}/invoice/payment-link/${id}`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (!paymentLink) return;
+    try {
+      await navigator.clipboard.writeText(paymentLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy the link. Select and copy it manually.");
+    }
   };
 
   const doDelete = async () => {
@@ -232,11 +238,11 @@ export default function InvoiceDetail() {
             {can("update") && invoice.status !== "PAID" && (
               <>
                 <Button variant="outline" onClick={createLink} loading={creatingLink}>
-                  <ExternalLink className="size-4" /> Payment link
+                  <ExternalLink className="size-4" /> Square checkout
                 </Button>
-                <Button variant="outline" onClick={copyLink}>
+                <Button variant="outline" onClick={copyLink} disabled={!paymentLink}>
                   {copied ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
-                  {copied ? "Copied" : "Copy link"}
+                  {copied ? "Copied" : "Copy payment link"}
                 </Button>
               </>
             )}
@@ -288,7 +294,7 @@ export default function InvoiceDetail() {
           )}
           {invoice.squarePaymentLink && (
             <div>
-              <p className="text-muted-foreground">Payment link</p>
+              <p className="text-muted-foreground">Square checkout</p>
               <a href={invoice.squarePaymentLink} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
                 Open checkout
               </a>
@@ -296,6 +302,33 @@ export default function InvoiceDetail() {
           )}
         </CardContent>
       </Card>
+
+      {paymentLink && (
+        <Card className="mb-6 border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
+                <CheckCircle2 className="size-4 text-success" /> Permanent branded payment link
+              </p>
+              <p className="break-all text-sm font-medium">{paymentLink}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {paymentDomain || "Default payment host"} · {invoice.currency} · this link never changes
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={copyLink}>
+                {copied ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+              <a href={paymentLink} target="_blank" rel="noreferrer">
+                <Button size="sm">
+                  <ExternalLink className="size-4" /> Open
+                </Button>
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mb-6">
         <CardContent>

@@ -33,6 +33,16 @@ export const env = {
   port: Number(process.env.PORT || 3001),
   apiUrl: process.env.API_URL || "http://localhost:3001",
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  /**
+   * Extra CORS origins, comma-separated. Supports `*` wildcards, e.g.
+   * `https://pay.*` to allow every brand payment subdomain when the frontend
+   * is hosted separately (Vercel fallback). Brand payment domains stored in
+   * the database are also allowed automatically.
+   */
+  corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   databaseUrl: required("DATABASE_URL"),
   jwtSecret: required("JWT_SECRET"),
   jwtRefreshSecret: required("JWT_REFRESH_SECRET"),

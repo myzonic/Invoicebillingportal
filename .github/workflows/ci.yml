@@ -24,6 +24,7 @@ jobs:
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run verify:currency
 
   frontend:
     name: Frontend — typecheck & build

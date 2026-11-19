@@ -44,7 +44,15 @@ export interface Client {
 export interface Brand {
   id: string;
   name: string;
-  logoUrl?: string;
+  /** Primary domain, e.g. crystalwebsites.com.au */
+  domain?: string | null;
+  /** Label before the domain; defaults to "pay". */
+  paymentSubdomain?: string;
+  paymentDomain?: string;
+  businessName?: string | null;
+  country?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
   currency: string;
   email?: string;
   phone?: string;
@@ -52,6 +60,9 @@ export interface Brand {
   pdfHeader?: string;
   pdfFooter?: string;
   isDefault: boolean;
+  isActive?: boolean;
+  paymentEnabled?: boolean;
+  paymentSettings?: Record<string, unknown> | null;
   _count?: { clients: number; invoices: number };
 }
 
@@ -79,6 +90,9 @@ export type InvoiceStatus = "DRAFT" | "SENT" | "PARTIALLY_PAID" | "PAID" | "OVER
 export interface Invoice {
   id: string;
   number: string;
+  publicToken?: string;
+  permalink?: string;
+  paymentDomain?: string;
   clientId: string;
   client?: { id: string; name: string; email?: string };
   brandId?: string;
@@ -105,13 +119,29 @@ export interface Invoice {
 export interface Payment {
   id: string;
   invoiceId: string;
+  /** Amount charged in `currency` (USD for Square). */
   amount: number;
   currency: string;
   method: "SQUARE" | "MANUAL" | "BANK_TRANSFER";
   status: "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
   reference?: string;
+  locationId?: string;
+  quoteId?: string;
+  /** Original invoice amount/currency this charge was derived from. */
+  invoiceAmount?: number;
+  invoiceCurrency?: string;
+  exchangeRate?: number;
+  exchangeRateProvider?: string;
+  exchangeRateAt?: string;
+  usdAmount?: number;
   capturedAt?: string;
   createdAt: string;
+}
+
+/** Opaque handle to a server-side locked USD conversion for one payment attempt. */
+export interface PaymentQuote {
+  token: string;
+  expiresAt: string;
 }
 
 export interface AuditLog {

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Trash2, Eye } from "lucide-react";
+import { Plus, Trash2, Eye, Copy, CheckCircle2, ExternalLink } from "lucide-react";
 import {
   useBrandsQuery,
   useClientsQuery,
@@ -13,7 +13,7 @@ import {
 import { useCan } from "@/lib/permissions";
 import { api } from "@/lib/api";
 import { errorMessage, money, stripTags } from "@/lib/utils";
-import type { InvoiceItem, InvoiceStatus } from "@/types";
+import type { Invoice, InvoiceItem, InvoiceStatus } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +21,8 @@ import { RichTextEditor } from "@/components/ui/richText";
 import { Textarea, Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/table";
 import { Dialog } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/table";
 import { PdfFrame } from "@/components/PdfFrame";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
@@ -60,6 +60,8 @@ export default function InvoiceForm() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewing, setPreviewing] = useState(false);
+  const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (invoiceData) {
@@ -81,6 +83,7 @@ export default function InvoiceForm() {
   }, [invoiceData]);
 
   const set = (key: keyof typeof form, value: unknown) => setForm((f) => ({ ...f, [key]: value }));
+  const selectedBrand = brands?.data.find((b) => b.id === form.brandId) || brands?.data.find((b) => b.isDefault);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0);
@@ -144,13 +147,26 @@ export default function InvoiceForm() {
       if (isEdit) {
         await updateInvoice({ id: id!, body: buildPayload() }).unwrap();
         toast.success("Invoice updated");
+        navigate("/dashboard/invoices");
       } else {
-        await createInvoice(buildPayload()).unwrap();
+        const result = await createInvoice(buildPayload()).unwrap();
+        setCreatedInvoice(result.data);
         toast.success("Invoice created");
       }
-      navigate("/dashboard/invoices");
     } catch (err) {
       toast.error(errorMessage(err));
+    }
+  };
+
+  const paymentLink = createdInvoice?.permalink || "";
+  const copyPaymentLink = async () => {
+    if (!paymentLink) return;
+    try {
+      await navigator.clipboard.writeText(paymentLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy the link. Select and copy it manually.");
     }
   };
 
@@ -181,7 +197,10 @@ export default function InvoiceForm() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Brand">
+              <Field
+                label="Brand / Company"
+                hint={selectedBrand?.paymentDomain ? `Payment domain: ${selectedBrand.paymentDomain}` : "Select a brand to set its payment domain"}
+              >
                 <Select value={form.brandId} onChange={(e) => set("brandId", e.target.value)}>
                   <option value="">Default brand</option>
                   {brands?.data.map((b) => (
@@ -351,6 +370,46 @@ export default function InvoiceForm() {
 
       <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} title="Live PDF preview" description="Changes are not saved until you submit the form." className="max-w-4xl">
         {previewUrl ? <PdfFrame src={previewUrl} /> : <Spinner />}
+      </Dialog>
+
+      <Dialog
+        open={!!createdInvoice}
+        onClose={() => {
+          setCreatedInvoice(null);
+          navigate("/dashboard/invoices");
+        }}
+        title="Invoice Created"
+        description={`Invoice ${createdInvoice?.number || ""} is ready. Share its permanent branded payment link with your client.`}
+      >
+        {createdInvoice && (
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/50 p-3">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <CheckCircle2 className="size-3.5 text-success" /> Payment link
+              </p>
+              <p className="break-all font-medium">{paymentLink}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {selectedBrand?.paymentDomain || createdInvoice.paymentDomain} · {createdInvoice.currency}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={copyPaymentLink}>
+                {copied ? <CheckCircle2 className="size-4" /> : <Copy className="size-4" />}
+                {copied ? "Copied" : "Copy Payment Link"}
+              </Button>
+              {paymentLink && (
+                <a href={paymentLink} target="_blank" rel="noreferrer">
+                  <Button variant="outline">
+                    <ExternalLink className="size-4" /> Open Payment Page
+                  </Button>
+                </a>
+              )}
+              <Button variant="ghost" onClick={() => navigate(`/dashboard/invoices/${createdInvoice.id}`)}>
+                View invoice
+              </Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

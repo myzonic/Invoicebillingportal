@@ -16,10 +16,15 @@ export default function PaymentLink() {
   if (isError || !data) return <EmptyState title="Invoice not available" hint="Check the link and try again." />;
 
   const inv = data.data;
+  const brand = inv.brand;
   const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number }[];
   const accent = brandColor(inv.color);
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);
+  const businessName = brand?.businessName || brand?.name || branding.defaultBrandName;
+  const businessLines = [brand?.address, [brand?.email, brand?.phone].filter(Boolean).join(" · ")]
+    .filter(Boolean)
+    .join("\n");
 
   return (
     <div
@@ -54,8 +59,12 @@ export default function PaymentLink() {
                 border: `1px solid ${shade(accent, -0.15)}`,
               }}
             >
-              <Logo className="size-16" />
+              <Logo src={brand?.logoUrl} alt={businessName} className="size-16" />
             </div>
+          </div>
+          <div className="mb-4 text-center">
+            <p className="text-sm font-semibold text-neutral-900">{businessName}</p>
+            {businessLines && <p className="mt-0.5 whitespace-pre-line text-xs text-neutral-500">{businessLines}</p>}
           </div>
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -72,13 +81,13 @@ export default function PaymentLink() {
                 border: `1px solid ${shade(accent, -0.15)}`,
               }}
             >
-              {inv.status?.replace("_", " ")}
+              {(inv.paymentState || inv.status || "").replace("_", " ")}
             </span>
           </div>
 
           <p className="mb-6 text-sm text-neutral-600">
-            {inv.brand?.name || branding.defaultBrandName} â€¢ billed to <span className="font-medium text-neutral-900">{inv.client?.name}</span> â€¢ due{" "}
-            {formatDate(inv.dueDate)}
+            Billed to <span className="font-medium text-neutral-900">{inv.client?.name}</span> • currency{" "}
+            <span className="font-medium text-neutral-900">{inv.currency}</span> • due {formatDate(inv.dueDate)}
           </p>
 
           <div className="mb-6 overflow-hidden rounded-xl border" style={{ borderColor: rgba(accent, 0.5) }}>
@@ -131,7 +140,7 @@ export default function PaymentLink() {
           ) : (
             <button
               type="button"
-              onClick={() => navigate(`/invoice/checkout/${inv.id}`)}
+              onClick={() => navigate(`/invoice/checkout/${inv.publicToken || inv.id}`)}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold text-white outline-none transition-all hover:brightness-105 active:scale-[0.98]"
               style={{
                 background: `linear-gradient(180deg, ${shade(accent, 0.2)}, ${shade(accent, -0.05)} 45%, ${shade(accent, -0.25)})`,
@@ -143,7 +152,7 @@ export default function PaymentLink() {
           )}
 
           <a
-            href={`/api/payments/public/${id}/pdf${inv.currency ? `?currency=${encodeURIComponent(inv.currency)}` : ""}`}
+            href={`/api/payments/public/${inv.publicToken || id}/pdf`}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:brightness-[0.99]"
             style={{ borderColor: rgba(accent, 0.5), background: accentSoft }}
           >

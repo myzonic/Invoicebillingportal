@@ -27,7 +27,7 @@ Browser <-> Backend (:3000, serves /api + built frontend + /uploads) <-> Postgre
                                         <-> Square API (checkout + webhooks)
 ```
 
-The payment page always charges the client in **USD** (the merchant's USD Square account) while showing the amount in the client's local currency.
+Invoices and the branded payment page always show the client the invoice's **selected currency** (AUD/GBP/CAD/USD/…). Behind the scenes the payable amount is converted to **USD** and charged through the existing US Square merchant account. The converted USD amount is backend-only — see [Multi-currency payments](#multi-currency-payments-usd-square-processing).
 
 ## Local development
 
@@ -67,6 +67,49 @@ docker pull ghcr.io/<owner>/invoicebillingportal:latest
 docker compose up -d
 ```
 
+## Multi-brand setup & permanent branded payment links
+
+Every invoice gets a **permanent, unguessable link** of the form:
+
+```
+https://pay.<brand-domain>/invoice/<48-hex-token>
+e.g. https://pay.crystalwebsites.com.au/invoice/9f2c…(48 chars)
+```
+
+The token is random (`randomBytes(24)`) and stored on the invoice, so the URL never changes — even if the invoice number, amount or brand details are edited later. Existing invoices were backfilled with tokens in the migration. Legacy numeric IDs still resolve on the same route.
+
+**Managing brands:** go to **Brands / Companies** in the portal. For each brand set: name, business/legal name, logo, primary domain, payment subdomain (default `pay`), country, website, currency, contact details, active flag and online-payment toggle. The **Generated payment domain** (`<subdomain>.<domain>`) is shown live in the form. Invoices belong to a brand, and the list can be filtered by brand via the "view brand invoices" action. The public page renders that brand's logo, business name and contact details — nothing is hard-coded to one company.
+
+### DNS + TLS for `pay.<domain>` (external to the app)
+
+The app generates and validates these hosts but **cannot provision DNS or certificates**. For every brand that accepts online payments:
+
+1. **DNS:** point the payment host at the server/edge that serves the portal.
+   - Single container (Dokploy): add a `CNAME` from `pay.crystalwebsites.com.au` → your Dokploy app domain (or an `A` record → the server IP).
+   - Vercel fallback: add the `pay.*` host as a domain in Vercel and point the CNAME at Vercel's `cname.vercel-dns.com`.
+   - To avoid per-brand records, use a **wildcard** `*.yourdomain.com` CNAME/A record and give each brand a distinct subdomain.
+2. **TLS:** issue a certificate covering the payment host(s). In Dokploy/Traefik enable Let's Encrypt and add the domains to the app's router; a wildcard cert (`*.yourdomain.com`) covers every brand subdomain. Vercel issues certificates automatically for attached domains.
+3. **Reverse proxy (Dokploy/Traefik):** the app serves one frontend build on all hosts, so simply add each payment host to the application's HTTP router and proxy port `3000`. Example Traefik labels (Dokploy exposes these in the app's Domains/Network settings):
+
+   ```
+   traefik.http.routers.portal.rule=Host(`dashboard.yourdomain.com`) || Host(`pay.crystalwebsites.com.au`) || Host(`pay.otherbrand.com`)
+   # or, with a wildcard cert:
+   traefik.http.routers.portal.rule=HostRegexp(`{sub:[a-z0-9-]+}.yourdomain.com`)
+   traefik.http.routers.portal.tls.certresolver=letsencrypt
+   ```
+
+   The token in the URL carries brand identity, so the same container serves every `pay.<domain>` host. No per-brand app or deploy is needed.
+
+4. **CORS (only for the Vercel fallback / separate API host):** in the primary single-container deploy the frontend and API share the same origin, so no CORS setup is needed. If the frontend is hosted separately (e.g. Vercel) and calls a different API domain, add the branded hosts to the API's CORS allowlist. The API already allows `CLIENT_URL`, `API_URL`, and every **active brand's payment domain from the database** automatically. You can additionally allow wildcard patterns with `CORS_ALLOWED_ORIGINS`, e.g.:
+
+   ```
+   CORS_ALLOWED_ORIGINS=https://pay.*
+   ```
+
+   (comma-separated; `*` is a wildcard). The brand-domain cache refreshes every 5 minutes and is invalidated immediately whenever a brand is created/updated/deleted.
+
+**Host → brand resolution:** `GET /api/payments/domain/:host` maps an incoming `pay.<domain>` host to its brand (used by the public pages), and `GET /api/payments/public/:token` returns only client-facing invoice data plus the brand identity and payment state.
+
 ## PDF preview and editing
 
 Invoices are rendered from their stored data, so the PDF is never a stale file:
@@ -82,4 +125,33 @@ Exchange rates are fetched automatically from ECB data via Frankfurter, with `op
 - Manual overrides in **Settings → Currency Conversion** always take precedence over live rates (`1 USD = X`).
 - The currency dropdowns in the invoice form and PDF editor are populated from the available rate list, so newly supported currencies appear automatically.
 - **Settings** shows the active provider, source (live / override / mixed) and last update time. **Refresh live** forces an immediate fetch.
+
+## Multi-currency payments (USD Square processing)
+
+Client-facing currency and Square processing currency are deliberately separate:
+
+| | Value |
+|---|---|
+| Invoice / payment page / PDF / email / receipt | The invoice's stored currency (e.g. `AUD 1,500`) |
+| Card charge (Square) | USD equivalent, via the existing US location |
+
+**How a payment attempt works**
+
+1. The client opens the branded link (`pay.<brand-domain>/invoice/<secure-token>`). All displayed amounts come from the invoice and use its original currency — the client's IP/country never rewrites the display.
+2. On the checkout page the browser calls `POST /api/payments/quote/:invoiceId`. The backend fetches the latest available rate (cached snapshot, refreshed every 6h or forced by **Refresh live**) and stores a short-lived `PaymentQuote` (15-minute TTL) containing the exact USD amount, rate, provider and timestamp. Only an opaque `token` is returned to the browser — the USD figure never reaches the client UI.
+3. The browser tokenises the card with the Square Web Payments SDK and posts `sourceId` + `quoteToken` to `POST /api/payments/charge/:invoiceId`.
+4. The backend atomically claims the quote (a second request with the same token is rejected), charges the **locked** USD amount through the US location, and writes a `Payment` record with: charged `amount`/`currency`, original `invoiceAmount`/`invoiceCurrency`, `exchangeRate`, `exchangeRateProvider`, `exchangeRateAt`, `usdAmount`, `locationId`, `quoteId`, and the Square payment `reference`. The invoice is set to `PAID` without ever changing its original amount or currency.
+5. A new attempt (after expiry, decline or reload) creates a fresh quote and therefore a fresh rate. Square webhooks reconcile hosted-checkout payments the same way.
+
+The USD conversion helper fails closed: an unknown currency or a missing/invalid rate refuses to charge rather than silently converting at 1:1.
+
+**Square configuration to verify in your developer console** (before going live)
+
+- The location used for charges (`SQUARE_LOCATION_ID`, or `SQUARE_LOCATION_USD`/`SQUARE_TOKEN_USD`) belongs to a **US** account and its processing currency is **USD**.
+- `SQUARE_ENVIRONMENT=production` and the access token are the production credentials, not sandbox.
+- The location supports **online/card-not-present** payments and the card brands you accept; Apple Pay/Google Pay must be enabled there if you use them.
+- The webhook subscription is active for `payment.updated`/`payment.completed`, and its signature key and notification URL match `SQUARE_WEBHOOK_SIGNATURE_KEY` / `SQUARE_WEBHOOK_URL` exactly.
+- Settlement is in USD; the client's statement will show the USD amount even though the invoice/receipt you issue stays in the invoice currency. Include any jurisdiction-required disclosure (e.g. the settled amount and rate) in your receipt template if your local law requires it — the app keeps a full per-payment FX audit trail for that purpose.
+
+**Payment states** shown on the public page: `UNPAID`, `PROCESSING` (a Square payment link is pending), `PARTIALLY_PAID`, `COMPLETED` (invoice paid), `CANCELLED`, `EXPIRED` (invoice overdue). These map to the existing invoice/payment status fields.
 

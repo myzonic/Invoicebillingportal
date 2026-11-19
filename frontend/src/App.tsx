@@ -34,6 +34,8 @@ export default function App() {
       <Route path="/signup/:token" element={<Signup />} />
       <Route path="/invoice/payment-link/:id" element={<PaymentLink />} />
       <Route path="/invoice/checkout/:id" element={<SquareCheckout />} />
+      {/* Permanent branded permalink: pay.<domain>/invoice/<secure-token> */}
+      <Route path="/invoice/:id" element={<PaymentLink />} />
       <Route path="/payment_success" element={<PaymentResult variant="success" />} />
       <Route path="/payment_cancel" element={<PaymentResult variant="cancel" />} />
 

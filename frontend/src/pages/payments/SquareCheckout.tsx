@@ -2,7 +2,8 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, CreditCard, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { usePublicInvoiceQuery } from "@/app/apiSlice";
+import { useCreatePaymentQuoteMutation, usePublicInvoiceQuery } from "@/app/apiSlice";
+import type { PaymentQuote } from "@/types";
 import { brandColor, formatDate, money, rgba, richText, shade } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +22,8 @@ export default function SquareCheckout() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { data, isLoading, isError } = usePublicInvoiceQuery(id);
+  const [createQuote] = useCreatePaymentQuoteMutation();
+  const [quote, setQuote] = useState<PaymentQuote | null>(null);
   const [config, setConfig] = useState<CheckoutConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,14 +37,35 @@ export default function SquareCheckout() {
   });
   const setB = (key: keyof typeof billing, value: string) => setBilling((prev) => ({ ...prev, [key]: value }));
   const cardRef = useRef<SquareCard | null>(null);
+  const invoiceStatus = data?.data?.status;
+
+  // Starting a checkout locks a fresh exchange rate + USD amount on the server.
+  // The browser only holds an opaque token; the USD figure never leaves the API.
+  useEffect(() => {
+    if (!id || !invoiceStatus || invoiceStatus === "PAID") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await createQuote(id).unwrap();
+        if (!cancelled) {
+          setQuote(result.data);
+          setError("");
+        }
+      } catch {
+        if (!cancelled) setError("Could not lock a payment rate. Please refresh and try again.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, invoiceStatus, createQuote]);
 
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
     (async () => {
       try {
-        const currency = data.data.chargeCurrency || data.data.currency || "USD";
-        const res = await fetch(`/api/payments/config?currency=${encodeURIComponent(currency)}`);
+        const res = await fetch(`/api/payments/config`);
         const json = await res.json();
         if (json.success && !cancelled) setConfig(json.data);
       } catch {
@@ -95,12 +119,24 @@ export default function SquareCheckout() {
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);
   const inputBorder = { borderColor: rgba(accent, 0.5) };
-  const chargeCurrency = inv.chargeCurrency || "USD";
-  const chargeAmount = Number(inv.chargeAmount ?? inv.total);
-  const chargedInDifferentCurrency = chargeCurrency !== inv.currency;
+
+  const refreshQuote = async () => {
+    try {
+      const result = await createQuote(id).unwrap();
+      setQuote(result.data);
+      return result.data;
+    } catch {
+      return null;
+    }
+  };
 
   const handlePay = async () => {
     if (!cardRef.current) return;
+    if (!quote) {
+      setError("Preparing a secure rate — please try again in a moment.");
+      void refreshQuote();
+      return;
+    }
     if (!billing.name.trim() || !billing.addressLine1.trim() || !billing.city.trim() || !billing.postalCode.trim()) {
       setError("Please complete the cardholder name and billing address fields.");
       return;
@@ -113,20 +149,34 @@ export default function SquareCheckout() {
         setError(result.errors?.[0]?.detail || "Card could not be verified. Check the details and try again.");
         return;
       }
-      const res = await fetch(`/api/payments/charge/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId: result.token, currency: chargeCurrency, billing }),
-      });
+      const charge = async (quoteToken: string) =>
+        fetch(`/api/payments/charge/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceId: result.token, quoteToken, billing }),
+        });
+
+      const res = await charge(quote.token);
       const json = await res.json();
+      if (res.status === 409) {
+        // Rate expired / already used / invoice changed: lock a fresh quote for
+        // the next attempt and surface the server's specific reason.
+        void refreshQuote();
+        setError(json.message || "Payment details changed. Please try again.");
+        return;
+      }
       if (!res.ok || !json.success) {
+        // The attempt (and its quote) may already be consumed even on a decline,
+        // so lock a fresh rate for the next try.
+        void refreshQuote();
         setError(json.message || "Payment failed. Please try again.");
         return;
       }
       toast.success("Payment successful!");
-      const paid = json.data;
+      // Receipt stays in the original invoice currency; USD processing details
+      // are intentionally not exposed to the client.
       navigate(
-        `/payment_success?invoice=${id}&amount=${encodeURIComponent(String(paid?.amount ?? ""))}&currency=${encodeURIComponent(paid?.currency || chargeCurrency)}&color=${encodeURIComponent(inv.color || "")}`,
+        `/payment_success?invoice=${id}&amount=${encodeURIComponent(String(inv.total))}&currency=${encodeURIComponent(inv.currency || "USD")}&color=${encodeURIComponent(inv.color || "")}`,
         { replace: true },
       );
     } catch (e) {
@@ -172,7 +222,7 @@ export default function SquareCheckout() {
                   color: "transparent",
                 }}
               >
-                {brand?.name || company.name}
+                {brand?.businessName || brand?.name || company.name}
               </div>
               <div className="mt-1 text-xs text-white/75">{brand?.address || company.address}</div>
               <div className="text-xs text-white/75">
@@ -295,10 +345,12 @@ export default function SquareCheckout() {
                     border: `1px solid ${shade(accent, -0.15)}`,
                   }}
                 >
-                  <Logo className="size-12" />
+                  <Logo src={brand?.logoUrl} alt={brand?.name} className="size-12" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold leading-tight text-neutral-900">{branding.paymentHost}</p>
+                  <p className="text-sm font-bold leading-tight text-neutral-900">
+                    {brand?.businessName || brand?.name || branding.paymentHost}
+                  </p>
                   <p className="flex items-center gap-1 text-[11px] text-neutral-500">
                     <Lock className="size-3" style={{ color: accentDark }} /> Secure checkout
                   </p>
@@ -336,10 +388,8 @@ export default function SquareCheckout() {
                 >
                   {money(inv.total, inv.currency)}
                 </span>
-                {chargedInDifferentCurrency && (
-                  <p className="mt-0.5 text-[11px] font-medium text-neutral-500">
-                    You will be charged {money(chargeAmount, chargeCurrency)} in {chargeCurrency}
-                  </p>
+                {quote && (
+                  <p className="mt-0.5 text-[11px] font-medium text-neutral-500">Secure rate locked for this payment</p>
                 )}
               </div>
             </div>
@@ -453,7 +503,7 @@ export default function SquareCheckout() {
 
                     <button
                       type="button"
-                      disabled={!ready || busy}
+                      disabled={!ready || !quote || busy}
                       onClick={handlePay}
                       className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold text-white outline-none transition-all hover:brightness-105 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
                       style={{
@@ -461,7 +511,7 @@ export default function SquareCheckout() {
                         boxShadow: `0 8px 20px -6px ${rgba(accent, 0.6)}, inset 0 1px 0 ${rgba("#ffffff", 0.35)}`,
                       }}
                     >
-                      <CreditCard className="size-5" /> Pay {money(chargeAmount, chargeCurrency)} <ArrowRight className="size-4" />
+                      <CreditCard className="size-5" /> Pay {money(inv.total, inv.currency || "USD")} <ArrowRight className="size-4" />
                     </button>
                     <p className="text-center text-[11px] leading-relaxed text-neutral-500">
                       Your payment is encrypted and processed securely. Paying confirms this invoice.

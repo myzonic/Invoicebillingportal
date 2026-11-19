@@ -7,12 +7,30 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import { createInvoiceCheckoutUrl, chargeInvoiceWithToken } from "../../services/square";
 import { renderInvoicePdf } from "../../services/pdf";
-import { convertAmount, convertInvoice } from "../../services/rates";
-import { detectCurrency } from "../../services/geo";
+import { claimPaymentQuote, createPaymentQuote, loadPaymentQuote } from "../../services/paymentQuote";
+import { brandFromHost, invoicePermalink, paymentDomain } from "../../services/permalink";
 import { audit } from "../../utils/audit";
 import { env } from "../../config/env";
 
 const router = Router();
+
+/** Public lookup by secure token (legacy invoice ids still work). */
+async function findPublicInvoice(key: string) {
+  return prisma.invoice.findFirst({
+    where: { OR: [{ publicToken: key }, { id: key }] },
+    include: { client: true, brand: true, payments: { orderBy: { createdAt: "desc" } } },
+  });
+}
+
+/** Human-readable payment state for the client-facing page. */
+function paymentState(invoice: { status: string; payments: Array<{ status: PaymentStatus }> }) {
+  if (invoice.status === "PAID") return "COMPLETED";
+  if (invoice.status === "CANCELLED") return "CANCELLED";
+  if (invoice.status === "PARTIALLY_PAID") return "PARTIALLY_PAID";
+  if (invoice.status === "OVERDUE") return "EXPIRED";
+  if (invoice.payments.some((p) => p.status === PaymentStatus.PENDING)) return "PROCESSING";
+  return "UNPAID";
+}
 
 /**
  * Public: tells the Web Payments SDK how to initialize on the hosted checkout.
@@ -35,17 +53,58 @@ router.get(
   }),
 );
 
+/** Public: resolves an incoming payment host (pay.<domain>) to a brand. */
+router.get(
+  "/domain/:host",
+  asyncHandler(async (req, res) => {
+    const brands = await prisma.brand.findMany({ where: { isActive: true } });
+    const brand = brandFromHost(req.params.host, brands);
+    if (!brand) throw new ApiError(404, "No brand is configured for this payment domain");
+    res.json({
+      success: true,
+      data: {
+        id: brand.id,
+        name: brand.name,
+        businessName: brand.businessName,
+        logoUrl: brand.logoUrl,
+        paymentDomain: paymentDomain(brand),
+        currency: brand.currency,
+        paymentEnabled: brand.paymentEnabled,
+      },
+    });
+  }),
+);
+
+/**
+ * Public: called when a client starts a payment attempt. Fetches the latest
+ * available rate and locks the USD equivalent for a short window. Only an
+ * opaque token is returned — the converted USD amount stays server-side.
+ */
+router.post(
+  "/quote/:invoiceId",
+  asyncHandler(async (req, res) => {
+    const invoice = await findPublicInvoice(String(req.params.invoiceId));
+    if (!invoice) throw new ApiError(404, "Invoice not found");
+    if (invoice.status === "DRAFT") throw new ApiError(403, "Invoice is not ready for payment");
+    if (invoice.status === "PAID") throw new ApiError(400, "Invoice is already paid");
+
+    const quote = await createPaymentQuote(invoice);
+    res.json({ success: true, data: quote });
+  }),
+);
+
 /**
  * Hosted checkout: charges the invoice with a tokenized card from the
  * Square Web Payments SDK. The merchant's account is USD-only, so the card is
- * always charged in USD (converted from the invoice currency), while the
- * invoice itself is displayed to the client in their local currency. The
- * invoice is marked PAID on success.
+ * always charged in USD, converted from and reconciled against the invoice's
+ * own currency via a locked quote. The invoice is marked PAID on success and
+ * the client-facing amounts always remain in the original invoice currency.
  */
 router.post(
   "/charge/:invoiceId",
   asyncHandler(async (req, res) => {
     const sourceId = z.string().min(1, "Missing card token").parse(req.body.sourceId);
+    const quoteToken = z.string().min(1, "Missing payment quote").parse(req.body.quoteToken);
     const billing = z
       .object({
         name: z.string().optional(),
@@ -58,44 +117,84 @@ router.post(
       })
       .optional()
       .parse(req.body.billing);
-    const invoice = await prisma.invoice.findUnique({ where: { id: req.params.invoiceId } });
+    const invoice = await findPublicInvoice(String(req.params.invoiceId));
     if (!invoice) throw new ApiError(404, "Invoice not found");
     if (invoice.status === "DRAFT") throw new ApiError(403, "Invoice is not ready for payment");
     if (invoice.status === "PAID") throw new ApiError(400, "Invoice is already paid");
 
+    // The client authorises against a rate locked at attempt start, so the
+    // amount sent to Square is exactly the amount recorded on the payment.
+    const quote = await loadPaymentQuote(quoteToken, invoice.id);
+    // The invoice must not have changed since the rate was locked, otherwise
+    // the stored charge would no longer reconcile with the invoice.
+    if (Number(quote.invoiceAmount) !== Number(invoice.total) || quote.invoiceCurrency !== invoice.currency) {
+      throw new ApiError(409, "The invoice changed since this payment started. Please start a new payment attempt.");
+    }
+    if (!(await claimPaymentQuote(quote.id))) {
+      throw new ApiError(409, "This payment attempt has already been used. Please start a new one.");
+    }
+
     const chargeCurrency = "USD";
-    const chargeAmount =
-      chargeCurrency === invoice.currency ? Number(invoice.total) : await convertAmount(Number(invoice.total), invoice.currency, chargeCurrency);
+    const chargeAmount = Number(quote.usdAmount);
+    const locationId = env.square.locations[chargeCurrency]?.locationId || env.square.locationId;
 
     const payment = await chargeInvoiceWithToken(invoice, sourceId, { currency: chargeCurrency, amount: chargeAmount, billing });
     if (payment.status !== "COMPLETED") throw new ApiError(400, `Square payment ${payment.status}`);
 
-    await prisma.invoice.update({
-      where: { id: invoice.id },
-      data: { status: "PAID", paidAt: new Date() },
-    });
-    await prisma.payment.create({
-      data: {
-        invoiceId: invoice.id,
-        amount: chargeAmount,
-        currency: chargeCurrency,
-        method: PaymentMethod.SQUARE,
-        status: PaymentStatus.SUCCEEDED,
-        reference: payment.id,
-        capturedAt: new Date(),
-      },
-    });
+    const paidAt = new Date();
+    await prisma.$transaction([
+      prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: "PAID", paidAt },
+      }),
+      prisma.payment.create({
+        data: {
+          invoiceId: invoice.id,
+          amount: chargeAmount,
+          currency: chargeCurrency,
+          method: PaymentMethod.SQUARE,
+          status: PaymentStatus.SUCCEEDED,
+          reference: payment.id,
+          locationId,
+          quoteId: quote.id,
+          invoiceAmount: Number(quote.invoiceAmount),
+          invoiceCurrency: quote.invoiceCurrency,
+          exchangeRate: quote.exchangeRate,
+          exchangeRateProvider: quote.provider,
+          exchangeRateAt: quote.rateAt,
+          usdAmount: quote.usdAmount,
+          capturedAt: paidAt,
+        },
+      }),
+    ]);
 
     await audit({
       module: "payments",
       action: LogAction.CREATE,
-      details: { invoiceId: invoice.id, number: invoice.number, squarePaymentId: payment.id, currency: chargeCurrency, amount: chargeAmount },
+      details: {
+        invoiceId: invoice.id,
+        number: invoice.number,
+        squarePaymentId: payment.id,
+        invoiceAmount: Number(quote.invoiceAmount),
+        invoiceCurrency: quote.invoiceCurrency,
+        chargeCurrency,
+        chargeAmount,
+        exchangeRate: Number(quote.exchangeRate),
+        exchangeRateProvider: quote.provider,
+      },
       ip: req.ip,
     });
 
     res.json({
       success: true,
-      data: { id: payment.id, receiptUrl: payment.receipt_url, status: payment.status, amount: chargeAmount, currency: chargeCurrency },
+      // Client-facing amount/currency stay in the original invoice currency.
+      data: {
+        id: payment.id,
+        receiptUrl: payment.receipt_url,
+        status: payment.status,
+        amount: Number(invoice.total),
+        currency: invoice.currency,
+      },
     });
   }),
 );
@@ -107,10 +206,7 @@ router.post(
   "/checkout/:invoiceId",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: req.params.invoiceId },
-      include: { client: { select: { email: true } } },
-    });
+    const invoice = await findPublicInvoice(String(req.params.invoiceId));
     if (!invoice) throw new ApiError(404, "Invoice not found");
     if (invoice.status === "PAID") throw new ApiError(400, "Invoice is already paid");
 
@@ -136,13 +232,7 @@ router.post(
 router.get(
   "/public/:invoiceId",
   asyncHandler(async (req, res) => {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: req.params.invoiceId },
-      include: {
-        client: { select: { id: true, name: true, email: true, phone: true, address: true } },
-        brand: { select: { id: true, name: true, email: true, phone: true, address: true, logoUrl: true } },
-      },
-    });
+    const invoice = await findPublicInvoice(String(req.params.invoiceId));
     if (!invoice) throw new ApiError(404, "Invoice not found");
     if (invoice.status === "DRAFT") throw new ApiError(403, "Invoice is not ready for payment");
 
@@ -150,34 +240,21 @@ router.get(
       | { name?: string; email?: string; phone?: string; address?: string; website?: string }
       | undefined;
 
-    // Detect the client's local currency (IP country / explicit param) and, if
-    // it differs from the invoice currency, return amounts converted to it.
-    // The display is decoupled from the merchant's charging currency.
-    const currency = await detectCurrency(req, invoice.currency);
+    // The client always sees the invoice's selected currency. The USD
+    // conversion and Square processing amount stay strictly backend-only.
+    const display = invoice;
+    const currency = invoice.currency;
     const baseCurrency = invoice.currency;
-    const chargeCurrency = "USD";
-    const chargeAmount =
-      chargeCurrency === baseCurrency ? Number(invoice.total) : await convertAmount(Number(invoice.total), baseCurrency, chargeCurrency);
-    const display =
-      currency === baseCurrency
-        ? invoice
-        : await convertInvoice(
-            {
-              currency: invoice.currency,
-              taxRate: Number(invoice.taxRate),
-              subtotal: Number(invoice.subtotal),
-              taxAmount: Number(invoice.taxAmount),
-              discountAmount: Number(invoice.discountAmount),
-              total: Number(invoice.total),
-              items: invoice.items as Array<{ description: string; quantity: number; unitPrice: number }>,
-            },
-            currency,
-          );
 
     res.json({
       success: true,
       data: {
         id: invoice.id,
+        publicToken: invoice.publicToken,
+        permalink: invoicePermalink(invoice, invoice.brand),
+        paymentDomain: paymentDomain(invoice.brand),
+        paymentState: paymentState(invoice),
+        pendingPayment: invoice.payments.some((p) => p.status === PaymentStatus.PENDING),
         number: invoice.number,
         items: display.items,
         subtotal: display.subtotal,
@@ -187,8 +264,6 @@ router.get(
         total: display.total,
         currency,
         baseCurrency,
-        chargeCurrency,
-        chargeAmount,
         color: invoice.color,
         status: invoice.status,
         issueDate: invoice.issueDate,
@@ -211,17 +286,13 @@ router.get(
 
 /**
  * Public: renders the invoice PDF (no auth). Blocked while DRAFT, same as the
- * payment page, so an unsent invoice is never publicly downloadable. Amounts
- * are converted to the client's local currency when it differs from the
- * invoice currency (pass `?currency=` to keep it consistent with the page).
+ * payment page, so an unsent invoice is never publicly downloadable. The PDF
+ * always shows the original invoice currency.
  */
 router.get(
   "/public/:invoiceId/pdf",
   asyncHandler(async (req, res) => {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: req.params.invoiceId },
-      include: { client: true, brand: true },
-    });
+    const invoice = await findPublicInvoice(String(req.params.invoiceId));
     if (!invoice) throw new ApiError(404, "Invoice not found");
     if (invoice.status === "DRAFT") throw new ApiError(403, "Invoice is not ready for payment");
 
@@ -229,28 +300,8 @@ router.get(
       | { name?: string; email?: string; phone?: string; address?: string; website?: string }
       | undefined;
 
-    const currency = await detectCurrency(req, invoice.currency);
-    const pdfInvoice =
-      currency === invoice.currency
-        ? invoice
-        : {
-            ...invoice,
-            ...(await convertInvoice(
-              {
-                currency: invoice.currency,
-                taxRate: Number(invoice.taxRate),
-                subtotal: Number(invoice.subtotal),
-                taxAmount: Number(invoice.taxAmount),
-                discountAmount: Number(invoice.discountAmount),
-                total: Number(invoice.total),
-                items: invoice.items as Array<{ description: string; quantity: number; unitPrice: number }>,
-              },
-              currency,
-            )),
-          };
-
     const pdf = await renderInvoicePdf({
-      invoice: pdfInvoice as unknown as Invoice,
+      invoice: invoice as unknown as Invoice,
       client: invoice.client,
       brand: invoice.brand,
       company: {

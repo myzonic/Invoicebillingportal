@@ -13,6 +13,11 @@ export interface CrudConfig {
   include?: Record<string, unknown>;
   orderBy?: Record<string, "asc" | "desc">;
   parseBody?: (body: Record<string, unknown>) => Record<string, unknown>;
+  // Optional response decorator (e.g. attach a computed payment domain).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform?: (row: any) => any;
+  /** Called after a create/update/delete (e.g. to invalidate a cache). */
+  onWrite?: () => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,7 +64,11 @@ export function crudRouter(
           }),
           delegate.count({ where }),
         ]);
-        res.json({ success: true, data: rows, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+        res.json({
+          success: true,
+          data: config.transform ? rows.map(config.transform) : rows,
+          meta: { page, limit, total, pages: Math.ceil(total / limit) },
+        });
       }),
     );
   }
@@ -71,7 +80,7 @@ export function crudRouter(
       asyncHandler(async (req, res) => {
         const row = await delegate.findUnique({ where: { id: req.params.id }, include: config.include });
         if (!row) throw new ApiError(404, `${config.model} not found`);
-        res.json({ success: true, data: row });
+        res.json({ success: true, data: config.transform ? config.transform(row) : row });
       }),
     );
   }
@@ -91,7 +100,8 @@ export function crudRouter(
           details: { id: row.id },
           ip: req.ip,
         });
-        res.status(201).json({ success: true, data: row });
+        config.onWrite?.();
+        res.status(201).json({ success: true, data: config.transform ? config.transform(row) : row });
       }),
     );
   }
@@ -111,7 +121,8 @@ export function crudRouter(
           details: { id: req.params.id },
           ip: req.ip,
         });
-        res.json({ success: true, data: row });
+        config.onWrite?.();
+        res.json({ success: true, data: config.transform ? config.transform(row) : row });
       }),
     );
   }
@@ -130,6 +141,7 @@ export function crudRouter(
           details: { id: req.params.id },
           ip: req.ip,
         });
+        config.onWrite?.();
         res.json({ success: true, message: "Deleted" });
       }),
     );

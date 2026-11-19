@@ -22,7 +22,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   // Prisma known errors
   const e = err as { code?: string; meta?: { target?: unknown }; message?: string };
   if (e?.code === "P2002") {
-    return res.status(409).json({ success: false, message: "A record with that value already exists" });
+    const target = Array.isArray(e.meta?.target) ? e.meta.target.join(", ") : String(e.meta?.target || "value");
+    return res.status(409).json({ success: false, message: `A record with that ${target} already exists` });
   }
   if (e?.code === "P2025") {
     return res.status(404).json({ success: false, message: "Record not found" });

@@ -1,5 +1,6 @@
 ﻿import { useSearchParams } from "react-router-dom";
 import { CheckCircle2, Download, XCircle } from "lucide-react";
+import { usePublicInvoiceQuery } from "@/app/apiSlice";
 import { Card, CardContent } from "@/components/ui/card";
 import { brandColor, money, rgba, shade } from "@/lib/utils";
 import Logo from "@/components/Logo";
@@ -9,11 +10,11 @@ export default function PaymentResult({ variant }: { variant: "success" | "cance
   const success = variant === "success";
   const paid = params.get("amount") ? money(params.get("amount"), params.get("currency") ?? undefined) : null;
   const invoiceId = params.get("invoice");
-  const currency = params.get("currency");
+  const { data } = usePublicInvoiceQuery(invoiceId || "", { skip: !invoiceId });
+  const brand = data?.data?.brand;
+  const businessName = brand?.businessName || brand?.name;
   const accent = brandColor(params.get("color"));
-  const pdfHref = invoiceId
-    ? `/api/payments/public/${invoiceId}/pdf${currency ? `?currency=${encodeURIComponent(currency)}` : ""}`
-    : null;
+  const pdfHref = invoiceId ? `/api/payments/public/${invoiceId}/pdf` : null;
   return (
     <div
       className="relative flex min-h-screen items-center justify-center overflow-hidden p-4"
@@ -39,9 +40,10 @@ export default function PaymentResult({ variant }: { variant: "success" | "cance
                 border: `1px solid ${shade(accent, -0.15)}`,
               }}
             >
-              <Logo className="size-16" />
+              <Logo src={brand?.logoUrl} alt={businessName} className="size-16" />
             </div>
           </div>
+          {businessName && <p className="mb-3 text-sm font-semibold text-neutral-800">{businessName}</p>}
           <div
             className={`mx-auto mb-4 flex size-16 items-center justify-center rounded-full ${success ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500"}`}
           >
@@ -53,7 +55,7 @@ export default function PaymentResult({ variant }: { variant: "success" | "cance
           )}
           <p className="mt-2 text-sm text-neutral-600">
             {success
-              ? "Thank you! Your payment has been received and the invoice will be marked as paid shortly."
+              ? "Thank you! Your payment has been received. A receipt is on its way to your email."
               : "You cancelled the payment. No charge was made. You can try again at any time."}
           </p>
           {success && pdfHref && (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { useInvoicesQuery, useDeleteInvoiceMutation } from "@/app/apiSlice";
@@ -17,6 +17,8 @@ import { ConfirmDialog } from "@/components/ui/confirm";
 const STATUSES = ["", "DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"];
 
 export default function Invoices() {
+  const [params] = useSearchParams();
+  const brandId = params.get("brand") || undefined;
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -24,7 +26,7 @@ export default function Invoices() {
   const [toDelete, setToDelete] = useState<string | null>(null);
   const can = useCan("invoices");
 
-  const { data, isLoading } = useInvoicesQuery({ page, limit: 10, search: debounced, status: status || undefined });
+  const { data, isLoading } = useInvoicesQuery({ page, limit: 10, search: debounced, status: status || undefined, brandId });
   const [deleteInvoice, { isLoading: deleting }] = useDeleteInvoiceMutation();
 
   const onSearch = (value: string) => {

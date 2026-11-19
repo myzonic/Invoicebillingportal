@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { InvoiceStatus, LogAction, PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
@@ -9,6 +10,7 @@ import { can } from "../../middleware/rbac";
 import { audit } from "../../utils/audit";
 import { renderInvoicePdf } from "../../services/pdf";
 import { sendInvoiceEmail } from "../../services/email";
+import { invoicePermalink, withPermalink } from "../../services/permalink";
 import { env } from "../../config/env";
 
 const router = Router();
@@ -113,10 +115,12 @@ router.get(
     const q = String(req.query.search || "").trim();
     const status = req.query.status ? String(req.query.status) : undefined;
     const clientId = req.query.clientId ? String(req.query.clientId) : undefined;
+    const brandId = req.query.brandId ? String(req.query.brandId) : undefined;
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
+    if (brandId) where.brandId = brandId;
     if (q) {
       where.OR = [
         { number: { contains: q, mode: "insensitive" } },
@@ -137,7 +141,7 @@ router.get(
 
     res.json({
       success: true,
-      data: rows,
+      data: rows.map((row) => withPermalink(row, row.brand)),
       meta: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   }),
@@ -152,7 +156,7 @@ router.get(
       include: { client: true, brand: true, payments: true },
     });
     if (!invoice) throw new ApiError(404, "Invoice not found");
-    res.json({ success: true, data: invoice });
+    res.json({ success: true, data: withPermalink(invoice, invoice.brand) });
   }),
 );
 
@@ -169,13 +173,15 @@ router.post(
 
     // Two concurrent creations can read the same sequence value. Retry with a
     // fresh number if the unique constraint on `number` rejects our insert.
-    let invoice: Awaited<ReturnType<typeof prisma.invoice.create>> | null = null;
+    let invoice: Prisma.InvoiceGetPayload<{ include: { client: true; brand: true } }> | null = null;
     for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
       const number = await nextInvoiceNumber(initials);
       try {
         invoice = await prisma.invoice.create({
           data: {
             number,
+            // 192 bits of entropy: stable and non-guessable for public links.
+            publicToken: randomBytes(24).toString("hex"),
             clientId: body.clientId,
             brandId: body.brandId || client.brandId || undefined,
             items: body.items,
@@ -208,7 +214,7 @@ router.post(
       details: { id: invoice.id, number: invoice.number },
       ip: req.ip,
     });
-    res.status(201).json({ success: true, data: invoice });
+    res.status(201).json({ success: true, data: withPermalink(invoice, invoice.brand) });
   }),
 );
 
@@ -314,7 +320,7 @@ router.put(
       details: { id: invoice.id, number: invoice.number },
       ip: req.ip,
     });
-    res.json({ success: true, data: invoice });
+    res.json({ success: true, data: withPermalink(invoice, invoice.brand) });
   }),
 );
 
@@ -333,6 +339,7 @@ router.patch(
         ...(status === InvoiceStatus.PAID ? { paidAt: new Date() } : {}),
         ...(status === InvoiceStatus.SENT ? { sentAt: new Date() } : {}),
       },
+      include: { client: true, brand: true },
     });
     await audit({
       userId: req.user?.id,
@@ -342,7 +349,7 @@ router.patch(
       details: { id: invoice.id, status },
       ip: req.ip,
     });
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: withPermalink(updated, updated.brand) });
   }),
 );
 
@@ -375,7 +382,8 @@ router.post(
         <p>Hi ${invoice.client.name},</p>
         <p>Your invoice <strong>${invoice.number}</strong> is attached.</p>
         <p>Amount due: <strong>${money(invoice.total, invoice.currency)}</strong></p>
-        <p><a href="${invoice.squarePaymentLink || `${env.branding.paymentUrl}/invoice/payment-link/${invoice.id}`}">Pay online now</a></p>
+        <p><a href="${invoicePermalink(invoice, invoice.brand)}">Pay online now</a></p>
+        ${invoice.squarePaymentLink ? `<p><a href="${invoice.squarePaymentLink}">Pay securely via Square</a></p>` : ""}
         <p>Thank you for your business.</p>
       `,
       attachments: [{ filename: `${invoice.number}.pdf`, content: pdf, contentType: "application/pdf" }],

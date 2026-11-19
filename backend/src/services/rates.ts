@@ -155,6 +155,64 @@ export async function convertAmount(amount: number, from: string, to: string): P
   return round2((Number(amount) / rateFrom) * rateTo);
 }
 
+export interface UsdConversion {
+  /** Exact USD amount, rounded to Square's 2-decimal (cent) precision. */
+  amount: number;
+  /** Units of `sourceCurrency` per 1 USD (e.g. 1.5 AUD/USD). */
+  rate: number;
+  /** Which provider/rule produced the rate, stored for reconciliation. */
+  provider: string;
+  /** When that rate was published/fetched. */
+  rateAt: Date;
+  sourceCurrency: string;
+}
+
+/** The part of `getRates()` the conversion maths actually needs. */
+export interface RatesSnapshot {
+  rates: Record<string, number>;
+  live: Record<string, number> | null;
+  overrides: Record<string, number>;
+  provider: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * Pure USD conversion. Kept separate from `getRates()` so the exact maths and
+ * fail-closed rules can be verified without a database or network access.
+ */
+export function computeUsdConversion(amount: number, from: string, snapshot: RatesSnapshot): UsdConversion {
+  const source = String(from || "").toUpperCase();
+  const value = round2(Number(amount));
+  if (!Number.isFinite(value) || value <= 0) throw new Error("Invalid amount for USD conversion");
+  if (source === BASE_CURRENCY) {
+    return { amount: value, rate: 1, provider: "base", rateAt: new Date(), sourceCurrency: source };
+  }
+  if (!CURRENCIES.includes(source)) throw new Error(`Unsupported invoice currency: ${source}`);
+
+  const isOverride = snapshot.overrides[source] != null;
+  const rate = snapshot.rates[source];
+  // Never fall back to 1:1 for a foreign currency: that would charge the
+  // client the wrong USD amount. A rate must come from live data or an override.
+  if (!rate || !(rate > 0) || (!isOverride && snapshot.live?.[source] == null)) {
+    throw new Error(`No usable exchange rate for ${source}; refusing to charge`);
+  }
+  return {
+    amount: round2(value / rate),
+    rate,
+    provider: isOverride ? "Manual override" : snapshot.provider || "unknown",
+    rateAt: isOverride ? new Date() : new Date(snapshot.updatedAt || Date.now()),
+    sourceCurrency: source,
+  };
+}
+
+/**
+ * Converts an invoice amount into USD for the US Square merchant account and
+ * returns the full FX snapshot needed to reconcile the resulting charge.
+ */
+export async function convertToUsd(amount: number, from: string): Promise<UsdConversion> {
+  return computeUsdConversion(amount, from, await getRates());
+}
+
 interface InvoiceLike {
   currency: string;
   subtotal: number;

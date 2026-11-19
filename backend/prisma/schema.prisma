@@ -97,22 +97,35 @@ model RolePermission {
 }
 
 model Brand {
-  id         String   @id @default(cuid())
-  name       String
-  logoUrl    String?
-  currency   String   @default("USD")
-  email      String?
-  phone      String?
-  address    String?
-  pdfHeader  String?
-  pdfFooter  String?
-  isDefault  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  // White-label payment domain: <paymentSubdomain>.<domain>
+  // e.g. "crystalwebsites.com.au" + "pay" -> https://pay.crystalwebsites.com.au
+  domain           String?  @unique
+  paymentSubdomain String   @default("pay")
+  businessName     String?
+  country          String?
+  website          String?
+  logoUrl          String?
+  currency         String   @default("USD")
+  email            String?
+  phone            String?
+  address          String?
+  pdfHeader        String?
+  pdfFooter        String?
+  isDefault        Boolean  @default(false)
+  isActive         Boolean  @default(true)
+  paymentEnabled   Boolean  @default(true)
+  // Non-secret payment preferences, e.g. { "supportEmail": "...", "receiptNote": "..." }
+  paymentSettings  Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   clients   Client[]
   merchants Merchant[]
   invoices  Invoice[]
+
+  @@index([isActive])
 }
 
 model Client {
@@ -151,6 +164,8 @@ model Merchant {
 model Invoice {
   id              String        @id @default(cuid())
   number          String        @unique
+  // Stable, non-guessable public identifier used in branded payment URLs.
+  publicToken     String        @unique
   clientId        String
   client          Client        @relation(fields: [clientId], references: [id])
   brandId         String?
@@ -174,6 +189,7 @@ model Invoice {
   updatedAt       DateTime      @updatedAt
 
   payments Payment[]
+  quotes    PaymentQuote[]
   invoiceLogs InvoiceLog[]
 
   @@index([clientId])
@@ -185,15 +201,49 @@ model Payment {
   id            String        @id @default(cuid())
   invoiceId     String
   invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // `amount`/`currency` are the amount actually sent to Square (always USD for
+  // the US merchant account). The invoice's own amount/currency are snapshotted
+  // below so a payment can always be reconciled against the original invoice.
   amount        Decimal       @db.Decimal(12, 2)
   currency      String        @default("USD")
   method        PaymentMethod
   status        PaymentStatus @default(PENDING)
   reference     String?       // Square payment id or manual reference
+  locationId    String?       // Square location that processed the charge
+  quoteId       String?       // locked FX quote used for this attempt
+  invoiceAmount Decimal?      @db.Decimal(12, 2)
+  invoiceCurrency String?
+  exchangeRate  Decimal?      @db.Decimal(20, 10) // units of invoice currency per 1 USD
+  exchangeRateProvider String?
+  exchangeRateAt DateTime?
+  usdAmount     Decimal?      @db.Decimal(12, 2)
   capturedAt    DateTime?
   createdAt     DateTime      @default(now())
 
   @@index([invoiceId])
+  @@index([status])
+}
+
+/// Short-lived, locked FX quote created when a client starts a payment attempt.
+/// It guarantees the USD amount authorised in the browser is exactly the amount
+/// recorded against the resulting Square payment.
+model PaymentQuote {
+  id              String   @id @default(cuid())
+  token           String   @unique
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceAmount   Decimal  @db.Decimal(12, 2)
+  invoiceCurrency String
+  usdAmount       Decimal  @db.Decimal(12, 2)
+  exchangeRate    Decimal  @db.Decimal(20, 10)
+  provider        String
+  rateAt          DateTime
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([expiresAt])
 }
 
 model AuditLog {

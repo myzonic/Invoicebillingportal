@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
-import { convertAmount } from "./rates";
+import { convertToUsd } from "./rates";
 import { Invoice, PaymentMethod, PaymentStatus } from "@prisma/client";
 
 const SQUARE_API = env.square.environment === "production"
@@ -63,8 +63,8 @@ function cents(amount: number) {
  */
 export async function createInvoiceCheckoutUrl(invoice: Invoice & { client?: { email?: string | null } | null }) {
   const chargeCurrency = "USD";
-  const chargeAmount =
-    chargeCurrency === invoice.currency ? Number(invoice.total) : await convertAmount(Number(invoice.total), invoice.currency, chargeCurrency);
+  const conversion = await convertToUsd(Number(invoice.total), invoice.currency);
+  const chargeAmount = conversion.amount;
   const cfg = configFor(chargeCurrency);
   const body: Record<string, unknown> = {
     idempotency_key: crypto.randomUUID(),
@@ -106,6 +106,13 @@ export async function createInvoiceCheckoutUrl(invoice: Invoice & { client?: { e
       method: PaymentMethod.SQUARE,
       status: PaymentStatus.PENDING,
       reference: link.id,
+      locationId: cfg.locationId,
+      invoiceAmount: Number(invoice.total),
+      invoiceCurrency: invoice.currency,
+      exchangeRate: conversion.rate,
+      exchangeRateProvider: conversion.provider,
+      exchangeRateAt: conversion.rateAt,
+      usdAmount: chargeAmount,
     },
   });
 

@@ -1,6 +1,19 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { refreshAccessToken, tokenStore } from "@/lib/api";
-import type { AuditLog, Brand, Client, CurrencyRates, DashboardReport, Invoice, InvoiceLog, Merchant, Paginated, Role, User } from "@/types";
+import type {
+  AuditLog,
+  Brand,
+  Client,
+  CurrencyRates,
+  DashboardReport,
+  Invoice,
+  InvoiceLog,
+  Merchant,
+  Paginated,
+  PaymentQuote,
+  Role,
+  User,
+} from "@/types";
 
 const baseUrl = import.meta.env.VITE_API_URL || "/api";
 
@@ -36,6 +49,7 @@ export interface ListQuery {
   search?: string;
   status?: string;
   clientId?: string;
+  brandId?: string;
   module?: string;
 }
 
@@ -46,6 +60,7 @@ function listParams(query: ListQuery) {
   if (query.search) params.set("search", query.search);
   if (query.status) params.set("status", query.status);
   if (query.clientId) params.set("clientId", query.clientId);
+  if (query.brandId) params.set("brandId", query.brandId);
   if (query.module) params.set("module", query.module);
   return params.toString();
 }
@@ -141,12 +156,16 @@ export const apiSlice = createApi({
     invoiceCheckout: builder.mutation<{ data: { url: string } }, string>({
       query: (id) => ({ url: `/payments/checkout/${id}`, method: "POST" }),
     }),
+    /** Locks a fresh FX rate + USD amount server-side for one payment attempt. */
+    createPaymentQuote: builder.mutation<{ data: PaymentQuote }, string>({
+      query: (id) => ({ url: `/payments/quote/${id}`, method: "POST" }),
+    }),
     publicInvoice: builder.query<
       {
         data: Partial<Invoice> & {
           baseCurrency?: string;
-          chargeCurrency?: string;
-          chargeAmount?: number;
+          paymentState?: string;
+          pendingPayment?: boolean;
           client?: Client;
           brand?: Brand;
           company?: { name: string; email: string; phone: string; address: string; website: string };
@@ -294,6 +313,7 @@ export const {
   useUpdateInvoiceStatusMutation,
   useSendInvoiceMutation,
   useInvoiceCheckoutMutation,
+  useCreatePaymentQuoteMutation,
   usePublicInvoiceQuery,
   useBrandsQuery,
   useBrandQuery,

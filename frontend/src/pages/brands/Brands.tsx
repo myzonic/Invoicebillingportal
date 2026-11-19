@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, ExternalLink, FileText } from "lucide-react";
 import { useBrandsQuery, useDeleteBrandMutation } from "@/app/apiSlice";
 import { useCan } from "@/lib/permissions";
 import { errorMessage } from "@/lib/utils";
@@ -44,8 +44,8 @@ export default function Brands() {
   return (
     <div>
       <PageHeader
-        title="Brands"
-        description="Manage your brands"
+        title="Brands / Companies"
+        description="Manage brand identities, payment domains and branding for invoices"
         action={
           can("create") && (
             <Link to="/dashboard/brand-management/add">
@@ -68,10 +68,10 @@ export default function Brands() {
         <Table>
           <THead>
             <TR>
-              <TH>Name</TH>
-              <TH>Currency</TH>
-              <TH>Email</TH>
-              <TH>Clients</TH>
+              <TH>Brand</TH>
+              <TH>Primary domain</TH>
+              <TH>Payment domain</TH>
+              <TH>Status</TH>
               <TH>Invoices</TH>
               <TH className="text-right">Actions</TH>
             </TR>
@@ -80,32 +80,64 @@ export default function Brands() {
             {data?.data.length === 0 && (
               <TR>
                 <TD colSpan={6}>
-                  <EmptyState title="No brands found" />
+                  <EmptyState title="No brands found" hint="Add your first brand to start issuing branded payment links." />
                 </TD>
               </TR>
             )}
             {data?.data.map((brand) => (
               <TR key={brand.id}>
-                <TD className="font-medium">
+                <TD>
                   <div className="flex items-center gap-2">
-                    {brand.logoUrl && (
-                      <img src={brand.logoUrl} alt="" className="size-7 rounded object-contain" />
-                    )}
-                    <span>
-                      {brand.name}
-                      {brand.isDefault && <Badge className="ml-2">default</Badge>}
-                    </span>
+                    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                      {brand.logoUrl ? (
+                        <img src={brand.logoUrl} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="text-xs font-bold">{brand.name.slice(0, 2).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium">
+                        {brand.name}
+                        {brand.isDefault && <Badge className="ml-2">default</Badge>}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{brand.businessName || brand.currency}</div>
+                    </div>
                   </div>
                 </TD>
-                <TD>{brand.currency}</TD>
-                <TD>{brand.email || "-"}</TD>
-                <TD>{brand._count?.clients ?? 0}</TD>
+                <TD className="text-sm">{brand.domain || <span className="text-muted-foreground">—</span>}</TD>
+                <TD className="text-sm font-medium">
+                  {brand.paymentDomain ? (
+                    <a
+                      href={`https://${brand.paymentDomain}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 hover:underline"
+                    >
+                      {brand.paymentDomain} <ExternalLink className="size-3" />
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">Not configured</span>
+                  )}
+                </TD>
+                <TD>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge className={brand.isActive === false ? "bg-muted text-muted-foreground" : "bg-success/10 text-success"}>
+                      {brand.isActive === false ? "Inactive" : "Active"}
+                    </Badge>
+                    {brand.paymentEnabled === false && <Badge className="bg-warning/10 text-warning">Payments off</Badge>}
+                  </div>
+                </TD>
                 <TD>{brand._count?.invoices ?? 0}</TD>
                 <TD className="text-right">
                   <div className="inline-flex gap-1">
+                    <Link to={`/dashboard/invoices?brand=${brand.id}`} title="View brand invoices">
+                      <Button variant="ghost" size="icon">
+                        <FileText className="size-4" />
+                      </Button>
+                    </Link>
                     {can("update") && (
-                      <Link to={`/dashboard/brand-management/update/${brand.id}`}>
-                        <Button variant="ghost" size="icon" title="Edit">
+                      <Link to={`/dashboard/brand-management/update/${brand.id}`} title="Manage / Edit / Settings">
+                        <Button variant="ghost" size="icon">
                           <Pencil className="size-4" />
                         </Button>
                       </Link>
