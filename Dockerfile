@@ -30,7 +30,12 @@ COPY --from=backend /app/node_modules ./node_modules
 COPY --from=backend /app/dist ./dist
 COPY --from=backend /app/prisma ./prisma
 COPY --from=frontend /app/dist /app/frontend/dist
-RUN mkdir -p /app/backend/uploads && chown -R node:node /app/backend/uploads
+# The build stage installs node_modules as root. Prisma's CLI writes engine
+# metadata at runtime (migrate deploy / db seed), so the non-root user must own
+# node_modules too — otherwise it fails with "Can't write to .../@prisma/engines".
+RUN mkdir -p /app/backend/uploads \
+    && chown -R node:node /app/backend/uploads \
+    && chown -R node:node /app/backend/node_modules
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
