@@ -1,8 +1,6 @@
-﻿import fs from "node:fs";
-import path from "node:path";
+﻿import { readUpload } from "./uploads";
 import { PDFDocument, PDFImage, PDFFont, StandardFonts, rgb } from "pdf-lib";
 import { Invoice, Client, Brand } from "@prisma/client";
-import { env } from "../config/env";
 import { resolveInvoiceDesign, InvoiceDesign } from "./invoiceDesign";
 import { effectiveInvoiceStatus, statusLabel } from "./invoiceStatus";
 import { normalizeBuilderData, type BuilderData } from "./invoiceBuilder";
@@ -304,11 +302,12 @@ interface LoadedImage {
   kind: "png" | "jpg";
 }
 
-function loadImage(file: string): LoadedImage | null {
+async function loadImage(name: string): Promise<LoadedImage | null> {
   try {
-    if (!fs.existsSync(file)) return null;
-    const b = fs.readFileSync(file);
-    const lower = file.toLowerCase();
+    const asset = await readUpload(name);
+    if (!asset) return null;
+    const b = asset.bytes;
+    const lower = name.toLowerCase();
     if (lower.endsWith(".png")) {
       const w = b.readUInt32BE(16);
       const h = b.readUInt32BE(20);
@@ -341,8 +340,8 @@ function loadImage(file: string): LoadedImage | null {
   }
 }
 
-/** Uploaded brand logo stored under the uploads directory, if one exists. */
-function resolveLogo(brand: Brand | null): LoadedImage | null {
+/** Uploaded brand logo from durable storage, if one exists. */
+async function resolveLogo(brand: Brand | null): Promise<LoadedImage | null> {
   const value = brand?.logoUrl;
   if (!value) return null;
   let name = "";
@@ -355,7 +354,7 @@ function resolveLogo(brand: Brand | null): LoadedImage | null {
     return null;
   }
   if (!name || !/\.(png|jpe?g)$/i.test(name)) return null;
-  return loadImage(path.resolve(env.upload.dir, path.basename(name)));
+  return loadImage(name);
 }
 
 export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
@@ -379,7 +378,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
   const { width, height } = page.getSize();
   const margin = 48;
   const right = width - margin;
-  const logoData = resolveLogo(brand);
+  const logoData = await resolveLogo(brand);
   const logo: PDFImage | null = logoData
     ? logoData.kind === "png"
       ? await doc.embedPng(logoData.bytes)
@@ -622,7 +621,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const { width, height } = page.getSize();
   const margin = compact ? 36 : 48;
   const right = width - margin;
-  const logoData = resolveLogo(brand);
+  const logoData = await resolveLogo(brand);
   const logo: PDFImage | null = logoData
     ? logoData.kind === "png"
       ? await doc.embedPng(logoData.bytes)

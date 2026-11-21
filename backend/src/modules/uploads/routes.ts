@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Router } from "express";
@@ -6,12 +5,10 @@ import multer from "multer";
 import { requireAuth } from "../../middleware/auth";
 import { ApiError } from "../../utils/ApiError";
 import { env } from "../../config/env";
+import { saveUpload } from "../../services/uploads";
 
 const router = Router();
 router.use(requireAuth);
-
-const uploadDir = path.resolve(env.upload.dir);
-fs.mkdirSync(uploadDir, { recursive: true });
 
 const ALLOWED = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"]);
 const EXT: Record<string, string> = {
@@ -22,16 +19,8 @@ const EXT: Record<string, string> = {
   "image/svg+xml": ".svg",
 };
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = EXT[file.mimetype] || path.extname(file.originalname).toLowerCase() || ".png";
-    cb(null, `${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: env.upload.maxMb * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED.has(file.mimetype)) cb(null, true);
@@ -40,7 +29,7 @@ const upload = multer({
 });
 
 router.post("/", (req, res, next) => {
-  upload.single("file")(req, res, (err: unknown) => {
+  upload.single("file")(req, res, async (err: unknown) => {
     if (err) {
       if (err instanceof multer.MulterError) {
         const msg = err.code === "LIMIT_FILE_SIZE" ? `File too large. Max size is ${env.upload.maxMb}MB.` : err.message;
@@ -49,7 +38,14 @@ router.post("/", (req, res, next) => {
       return next(err);
     }
     if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
-    res.status(201).json({ success: true, data: { url: `/uploads/${req.file.filename}` } });
+    try {
+      const ext = EXT[req.file.mimetype] || path.extname(req.file.originalname).toLowerCase() || ".png";
+      const name = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`;
+      await saveUpload(name, req.file.buffer, req.file.mimetype);
+      return res.status(201).json({ success: true, data: { url: `/uploads/${name}` } });
+    } catch (error) {
+      return next(error);
+    }
   });
 });
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { env } from "./config/env";
 import { notFound, errorHandler } from "./middleware/error";
 import { isOriginAllowed } from "./services/corsOrigins";
+import { readUpload } from "./services/uploads";
 
 import authRoutes from "./modules/auth/routes";
 import userRoutes from "./modules/users/routes";
@@ -114,7 +115,16 @@ export function createApp(): Express {
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     next();
   });
-  app.use("/uploads", express.static(path.resolve(env.upload.dir)));
+  // Serve uploaded logos from durable database storage (with a disk fallback
+  // for legacy files). This keeps logos alive across redeploys/containers.
+  app.get("/uploads/:name", async (req, res) => {
+    const name = path.basename(req.params.name);
+    const asset = await readUpload(name);
+    if (!asset) return res.status(404).end();
+    res.setHeader("Content-Type", asset.mimeType);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return res.send(asset.bytes);
+  });
 
   // Single-app deploy: serve the built frontend (Vite dist) and fall back to
   // index.html for client-side routes. API + uploads are handled above.

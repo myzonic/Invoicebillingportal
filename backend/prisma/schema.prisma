@@ -294,6 +294,15 @@ model InviteToken {
   createdAt DateTime @default(now())
 }
 
+/// Uploaded images (brand logos, invoice attachments) live in the database so
+/// they survive backend redeploys and container replacements.
+model UploadedAsset {
+  key       String   @id
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
 model Setting {
   key   String @id
   value Json
