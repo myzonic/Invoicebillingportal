@@ -19,7 +19,7 @@ const runtime = window.__APP_CONFIG__ || {};
 export const branding = {
   portalName: runtime.portalName || import.meta.env.VITE_PORTAL_NAME || "Billing Portal",
   portalTagline: runtime.portalTagline || import.meta.env.VITE_PORTAL_TAGLINE || "Finance & Billing",
-  companyName: runtime.companyName || import.meta.env.VITE_COMPANY_NAME || "Your Company",
+  companyName: runtime.companyName || import.meta.env.VITE_COMPANY_NAME || "CRYSTAL RESERVE LLC",
   paymentHost: runtime.paymentHost || import.meta.env.VITE_PAYMENT_HOST || window.location.host,
   paymentUrl: (runtime.paymentUrl || import.meta.env.VITE_PAYMENT_URL || window.location.origin).replace(/\/+$/, ""),
   logoUrl: runtime.logoUrl || import.meta.env.VITE_PUBLIC_LOGO_URL || "",

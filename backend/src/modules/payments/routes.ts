@@ -265,6 +265,7 @@ router.get(
         currency,
         baseCurrency,
         color: invoice.color,
+        designOverride: invoice.designOverride,
         status: invoice.status,
         issueDate: invoice.issueDate,
         dueDate: invoice.dueDate,

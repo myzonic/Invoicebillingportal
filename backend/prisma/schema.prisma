@@ -109,6 +109,10 @@ model Brand {
   logoUrl          String?
   // Brand accent color used by client-facing invoice pages and PDFs.
   color            String?
+  // Dominant colors extracted from the uploaded logo, e.g. ["#111827", "#d4a72c"].
+  logoPalette      Json?
+  // Saved per-brand invoice design: { layout, colors: { primary, secondary, accent, supporting } }.
+  invoiceDesign    Json?
   currency         String   @default("USD")
   email            String?
   phone            String?
@@ -180,6 +184,8 @@ model Invoice {
   total           Decimal       @db.Decimal(12, 2)
   currency        String        @default("USD")
   color           String?       // brand accent color shown on client-facing invoice/PDF
+  // Optional invoice-level design override; never mutates the brand defaults.
+  designOverride  Json?
   status          InvoiceStatus @default(DRAFT)
   notes           String?
   issueDate       DateTime

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Trash2, Eye, Copy, CheckCircle2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Eye, Copy, CheckCircle2, ExternalLink, Palette, Undo2 } from "lucide-react";
 import {
   useBrandsQuery,
   useClientsQuery,
@@ -13,7 +13,12 @@ import {
 import { useCan } from "@/lib/permissions";
 import { api } from "@/lib/api";
 import { errorMessage, money, stripTags } from "@/lib/utils";
-import type { Invoice, InvoiceItem, InvoiceStatus } from "@/types";
+import {
+  DEFAULT_INVOICE_DESIGN,
+  LAYOUT_LABEL,
+  normalizeInvoiceDesign,
+} from "@/lib/invoiceDesign";
+import type { Invoice, InvoiceDesign, InvoiceItem, InvoiceStatus } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +29,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/table";
 import { PdfFrame } from "@/components/PdfFrame";
+import { InvoiceDesignEditor } from "@/components/invoiceDesign/InvoiceDesignEditor";
+import { InvoiceDesignPreview } from "@/components/invoiceDesign/InvoiceDesignPreview";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 const STATUSES = ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"];
@@ -57,6 +64,10 @@ export default function InvoiceForm() {
     status: "DRAFT",
   });
   const [items, setItems] = useState<InvoiceItem[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
+  // Invoice-level design override; `null` means "inherit the brand design".
+  const [designOverride, setDesignOverride] = useState<InvoiceDesign | null>(null);
+  const [designTouched, setDesignTouched] = useState(false);
+  const [designOpen, setDesignOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewing, setPreviewing] = useState(false);
@@ -79,6 +90,8 @@ export default function InvoiceForm() {
         status: inv.status,
       });
       setItems(inv.items.map((i) => ({ description: i.description, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })));
+      setDesignOverride(normalizeInvoiceDesign(inv.designOverride));
+      setDesignTouched(false);
     }
   }, [invoiceData]);
 
@@ -101,6 +114,23 @@ export default function InvoiceForm() {
   const changeBrand = (brandId: string) => {
     const next = brands?.data.find((b) => b.id === brandId);
     setForm((f) => ({ ...f, brandId, currency: next?.currency || f.currency, color: "" }));
+  };
+
+  /** The brand's saved design (null when the brand still uses the classic look). */
+  const brandDesign = normalizeInvoiceDesign(selectedBrand?.invoiceDesign);
+  const effectiveDesign = designOverride ?? brandDesign;
+
+  const startCustomizing = () => {
+    setDesignOverride(brandDesign ?? DEFAULT_INVOICE_DESIGN);
+    setDesignTouched(true);
+    setDesignOpen(true);
+  };
+
+  /** Revert to the brand's saved design — clears this invoice's override. */
+  const resetToBrandDesign = () => {
+    setDesignOverride(null);
+    setDesignTouched(true);
+    setDesignOpen(false);
   };
 
   const totals = useMemo(() => {
@@ -129,6 +159,9 @@ export default function InvoiceForm() {
     issueDate: new Date(form.issueDate).toISOString(),
     dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
     status: form.status as InvoiceStatus,
+    // Only send when touched: `undefined` leaves the stored override untouched,
+    // `null` clears it (revert to the brand design).
+    ...(designTouched ? { designOverride: designOverride ?? null } : {}),
   });
 
   const validate = () => {
@@ -253,6 +286,10 @@ export default function InvoiceForm() {
                   <p className="mt-1 font-medium" style={{ color: selectedBrand.color || undefined }}>
                     Color: {selectedBrand.color || "default"}
                   </p>
+                  <p className="mt-1 text-muted-foreground">
+                    Invoice design: {effectiveDesign ? LAYOUT_LABEL[effectiveDesign.layout] : "Classic"}{" "}
+                    {designOverride ? "(custom for this invoice)" : "(brand default)"}
+                  </p>
                   {selectedBrand.paymentDomain && (
                     <p className="mt-1 text-muted-foreground">Pay link domain: {selectedBrand.paymentDomain}</p>
                   )}
@@ -317,6 +354,102 @@ export default function InvoiceForm() {
                 <Input type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
               </Field>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">Invoice design</h3>
+                <p className="text-xs text-muted-foreground">
+                  {selectedBrand?.name || "The selected brand"}'s saved design is used automatically. You can adjust the
+                  layout and colours for this invoice only — the brand defaults are never changed.
+                </p>
+              </div>
+              {!designOpen && (
+                <Button type="button" variant="outline" size="sm" onClick={startCustomizing}>
+                  <Palette className="size-4" /> {effectiveDesign ? "Customize this invoice" : "Choose a design"}
+                </Button>
+              )}
+            </div>
+
+            {!designOpen && effectiveDesign && (
+              <div className="grid items-start gap-4 sm:grid-cols-[190px_1fr]">
+                <div className="overflow-hidden rounded-lg border border-border bg-white">
+                  <InvoiceDesignPreview
+                    design={effectiveDesign}
+                    logoUrl={selectedBrand?.logoUrl}
+                    businessName={selectedBrand?.businessName || selectedBrand?.name}
+                    currency={form.currency}
+                    clientName={clients?.data.find((c) => c.id === form.clientId)?.name}
+                    invoiceNumber={invoiceData?.data.number}
+                  />
+                </div>
+                <div className="space-y-1.5 text-xs text-muted-foreground">
+                  <p>
+                    <span className="font-semibold text-foreground">Layout:</span> {LAYOUT_LABEL[effectiveDesign.layout]}{" "}
+                    {designOverride ? "(custom for this invoice)" : "(inherited from brand)"}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-foreground">Colours:</span>{" "}
+                    {(["primary", "secondary", "accent", "supporting"] as const).map((role) => (
+                      <span
+                        key={role}
+                        className="mr-1.5 inline-block size-4 rounded-full border border-black/10 align-[-3px]"
+                        style={{ background: effectiveDesign.colors[role] }}
+                        title={`${role} ${effectiveDesign.colors[role]}`}
+                      />
+                    ))}
+                  </p>
+                  <p>The same design is used on the client-facing invoice page and the downloadable A4 PDF.</p>
+                  <p>
+                    <button type="button" onClick={startCustomizing} className="font-medium text-primary underline">
+                      Customize this invoice
+                    </button>{" "}
+                    {designOverride && (
+                      <>
+                        ·{" "}
+                        <button type="button" onClick={resetToBrandDesign} className="font-medium text-primary underline">
+                          reset to brand design
+                        </button>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!designOpen && !effectiveDesign && (
+              <p className="text-xs text-muted-foreground">
+                This brand still uses the classic invoice look. Choose a design to use the modern brand-based invoice for
+                this invoice.
+              </p>
+            )}
+
+            {designOpen && (
+              <InvoiceDesignEditor
+                value={designOverride ?? brandDesign ?? DEFAULT_INVOICE_DESIGN}
+                onChange={(d) => {
+                  setDesignOverride(d);
+                  setDesignTouched(true);
+                }}
+                palette={selectedBrand?.logoPalette || []}
+                logoUrl={selectedBrand?.logoUrl}
+                businessName={selectedBrand?.businessName || selectedBrand?.name}
+                savedDesign={brandDesign}
+                onReset={resetToBrandDesign}
+                previewItems={items}
+                currency={form.currency}
+                clientName={clients?.data.find((c) => c.id === form.clientId)?.name}
+                invoiceNumber={invoiceData?.data.number}
+                actions={
+                  <Button type="button" variant="ghost" size="sm" onClick={resetToBrandDesign}>
+                    <Undo2 className="size-3.5" /> Reset to brand design
+                  </Button>
+                }
+              />
+            )}
           </CardContent>
         </Card>
 

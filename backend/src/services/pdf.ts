@@ -3,6 +3,7 @@ import path from "node:path";
 import { PDFDocument, PDFImage, PDFFont, StandardFonts, rgb } from "pdf-lib";
 import { Invoice, Client, Brand } from "@prisma/client";
 import { env } from "../config/env";
+import { resolveInvoiceDesign, InvoiceDesign } from "./invoiceDesign";
 
 export interface InvoicePdfData {
   invoice: Invoice;
@@ -45,9 +46,14 @@ function wrapText(text: string, maxWidth: number, f: PDFFont, size: number): str
 }
 
 /** Truncate a single line with an ellipsis so it fits within maxWidth. */
+function flat(text: unknown): string {
+  return String(text ?? "").replace(/\s+/g, " ").trim();
+}
+
 function fitText(text: string, maxWidth: number, f: PDFFont, size: number): string {
-  if (f.widthOfTextAtSize(text, size) <= maxWidth) return text;
-  let t = text;
+  const source = flat(text);
+  if (f.widthOfTextAtSize(source, size) <= maxWidth) return source;
+  let t = source;
   while (t.length > 1 && f.widthOfTextAtSize(`${t}...`, size) > maxWidth) t = t.slice(0, -1);
   return `${t}...`;
 }
@@ -55,7 +61,9 @@ function fitText(text: string, maxWidth: number, f: PDFFont, size: number): stri
 /** Characters the standard Helvetica (WinAnsi) fonts can encode; anything else becomes "?". */
 const NON_WINANSI = /[^\u0020-\u007e\u00a0-\u00ff\u0152-\u0153\u0160-\u0161\u0178\u017d-\u017e\u0192\u02c6\u02dc\u2013-\u2014\u2018-\u201a\u201c-\u201e\u2020-\u2022\u2026\u2030\u2039-\u203a\u20ac\u2122]/g;
 function san(s: string): string {
-  return String(s).replace(NON_WINANSI, "?");
+  // Newlines/tabs become spaces rather than "?" so multi-line addresses and
+  // notes stay readable (and never break WinAnsi width measurement).
+  return flat(s).replace(NON_WINANSI, "?");
 }
 
 // ---- Brand palette (glossy gold / black / white) ----
@@ -284,7 +292,11 @@ function resolveLogo(brand: Brand | null): LoadedImage | null {
   return uploaded && /\.(png|jpe?g)$/i.test(uploaded) ? loadImage(uploaded) : null;
 }
 
-export async function renderInvoicePdf({ invoice, client, brand, company }: InvoicePdfData): Promise<Uint8Array> {
+export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
+  const design = resolveInvoiceDesign(data.invoice, data.brand);
+  if (design && design.layout !== "legacy") return renderDesignedInvoicePdf({ ...data, design });
+
+  const { invoice, client, brand, company } = data;
   const doc = await PDFDocument.create();
   // ISO A4 page size in PDF points (210 x 297 mm).
   const page = doc.addPage([595.28, 841.89]);
@@ -482,6 +494,305 @@ export async function renderInvoicePdf({ invoice, client, brand, company }: Invo
   const contactY = footLines[1] ? 10 : 24;
   if (footContact) text(fitText(san(footContact), right - margin - 180, font, 9), margin, contactY, font, 9, accentLight);
   rightText(brandName.toUpperCase(), right, 24, bold, 9, accentMid);
+
+  return doc.save();
+}
+
+interface DesignedPdfInput extends InvoicePdfData {
+  design: InvoiceDesign;
+}
+
+/**
+ * Premium renderer used when a brand (or invoice) has a saved design config.
+ * The legacy black/gold renderer remains the fallback for brands that have
+ * never been configured, preserving the historical look of old invoices.
+ */
+async function renderDesignedInvoicePdf({ invoice, client, brand, company, design }: DesignedPdfInput): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  let page = doc.addPage([595.28, 841.89]);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const boldItalic = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+
+  const mix = (a: C, b: C, t: number): C => ({
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
+  });
+  const WHITE: C = { r: 1, g: 1, b: 1 };
+  const primary = hexToC(design.colors.primary);
+  const secondary = hexToC(design.colors.secondary);
+  const accent = hexToC(design.colors.accent);
+  const supporting = hexToC(design.colors.supporting);
+  const ink: C = { r: 0.1, g: 0.12, b: 0.16 };
+  const muted: C = { r: 0.38, g: 0.42, b: 0.48 };
+  const line: C = mix(primary, WHITE, 0.86);
+  const softFill: C = mix(supporting, WHITE, 0.55);
+  const headerDark = design.layout === "corporate" || design.layout === "premium";
+  const compact = design.layout === "compact";
+  const minimal = design.layout === "minimal";
+  const runFont = (b: boolean, i: boolean) => (b && i ? boldItalic : b ? bold : i ? italic : font);
+
+  const { width, height } = page.getSize();
+  const margin = compact ? 36 : 48;
+  const right = width - margin;
+  const logoData = resolveLogo(brand);
+  const logo: PDFImage | null = logoData
+    ? logoData.kind === "png"
+      ? await doc.embedPng(logoData.bytes)
+      : await doc.embedJpg(logoData.bytes)
+    : null;
+  const logoRatio = logoData?.ratio ?? 2;
+  const logoMaxH = minimal ? 44 : compact ? 52 : 60;
+  const logoMaxW = design.layout === "creative" ? 190 : 170;
+  let logoH = logoMaxH;
+  let logoW = logoH * logoRatio;
+  if (logoW > logoMaxW) {
+    logoW = logoMaxW;
+    logoH = logoW / logoRatio;
+  }
+
+  const text = (s: string, x: number, yy: number, f: PDFFont, size: number, c: C) =>
+    page.drawText(san(s), { x, y: yy, size, font: f, color: col(c) });
+  const rightText = (s: string, xRight: number, yy: number, f: PDFFont, size: number, c: C) =>
+    page.drawText(san(s), { x: xRight - f.widthOfTextAtSize(san(s), size), y: yy, size, font: f, color: col(c) });
+
+  const brandName = brand?.businessName || brand?.name || company.name;
+  const brandEmail = brand?.email || company.email;
+  const brandPhone = brand?.phone || company.phone;
+  const brandAddress = brand?.address || company.address;
+  const brandWebsite = brand?.website || company.website;
+
+  // ===================== Header =====================
+  const bandH = compact ? 88 : minimal ? 84 : 112;
+  const topY = height - bandH;
+  if (headerDark) {
+    page.drawRectangle({ x: 0, y: topY, width, height: bandH, color: col(primary) });
+    page.drawRectangle({ x: 0, y: topY, width, height: 3, color: col(design.layout === "corporate" ? secondary : accent) });
+    page.drawRectangle({ x: 0, y: topY + bandH - 3, width, height: 3, color: col(design.layout === "corporate" ? accent : secondary) });
+  } else if (design.layout === "creative") {
+    page.drawRectangle({ x: 0, y: topY, width: Math.min(250, width * 0.42), height: bandH, color: col(mix(accent, supporting, 0.35)) });
+    page.drawRectangle({ x: 0, y: topY + bandH - 4, width, height: 4, color: col(accent) });
+  } else if (!minimal) {
+    const ruleH = design.layout === "elegant" ? 2 : 4;
+    page.drawRectangle({ x: 0, y: topY + bandH - ruleH, width, height: ruleH, color: col(design.layout === "elegant" ? accent : primary) });
+    page.drawRectangle({ x: 0, y: topY, width, height: 1, color: col(line) });
+  } else {
+    page.drawRectangle({ x: margin, y: topY + 8, width: right - margin, height: 1, color: col(line) });
+  }
+
+  const logoX = margin;
+  const logoY = topY + (bandH - logoH) / 2;
+  if (headerDark || design.layout === "creative") {
+    page.drawRectangle({
+      x: logoX,
+      y: logoY,
+      width: logoW,
+      height: logoH,
+      color: col(WHITE),
+      borderColor: col(headerDark ? secondary : accent),
+      borderWidth: 1,
+    });
+  } else {
+    page.drawRectangle({ x: logoX, y: logoY, width: logoW, height: logoH, color: col(softFill), borderColor: col(line), borderWidth: 0.7 });
+  }
+  if (logo) {
+    const imgH = logoH - 10;
+    const imgW = imgH * logoRatio;
+    page.drawImage(logo, { x: logoX + (logoW - imgW) / 2, y: logoY + (logoH - imgH) / 2, width: imgW, height: imgH });
+  }
+
+  const headerLeft = logoX + logoW + 18;
+  const headerMaxW = Math.max(130, right - 170 - headerLeft);
+  const titleColor = headerDark ? WHITE : primary;
+  const detailColor = headerDark ? mix(WHITE, primary, 0.72) : muted;
+  let headerY = topY + bandH - (compact ? 42 : 54);
+  text(fitText(brandName, headerMaxW, bold, compact ? 13 : 15), headerLeft, headerY, bold, compact ? 13 : 15, titleColor);
+  headerY -= compact ? 16 : 19;
+  const headerDetails = [
+    ...String(brandAddress || "")
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+    [brandEmail, brandPhone].filter(Boolean).join("  |  "),
+  ]
+    .filter(Boolean)
+    .slice(0, 3);
+  headerDetails.slice(0, 3).forEach((lineText) => {
+    text(fitText(lineText, headerMaxW, font, 8.5), headerLeft, headerY, font, 8.5, detailColor);
+    headerY -= 12;
+  });
+
+  rightText("INVOICE", right, topY + bandH - (compact ? 40 : 52), bold, compact ? 24 : 30, headerDark ? mix(accent, WHITE, 0.35) : secondary);
+  rightText(`# ${invoice.number}`, right, topY + bandH - (compact ? 58 : 72), font, 10.5, headerDark ? mix(WHITE, primary, 0.7) : muted);
+
+  // ===================== Bill to / details =====================
+  const secTop = topY - 42;
+  text("BILL TO", margin, secTop, bold, 8, secondary);
+  text(fitText(client.name, 230, bold, 13), margin, secTop - 17, bold, 13, ink);
+  const clientLines = [
+    client.email,
+    client.phone,
+    ...String(client.address || "")
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  ].filter(Boolean) as string[];
+  clientLines.slice(0, 4).forEach((l, i) => text(fitText(l, 250, font, 9.5), margin, secTop - 34 - i * 14, font, 9.5, muted));
+
+  const metaTop = secTop;
+  rightText("INVOICE DETAILS", right, metaTop, bold, 8, secondary);
+  const meta: Array<[string, string]> = [
+    ["Issue date", invoice.issueDate.toISOString().slice(0, 10)],
+    ["Due date", invoice.dueDate ? invoice.dueDate.toISOString().slice(0, 10) : "-"],
+    ["Status", invoice.status.replace("_", " ")],
+    ["Currency", invoice.currency],
+  ];
+  meta.forEach(([k, v], i) => {
+    const yy = metaTop - 16 - i * 15;
+    text(k.toUpperCase(), right - 190, yy + 2, bold, 7.5, muted);
+    rightText(v, right, yy, font, 10, ink);
+  });
+
+  const bodyTop = Math.min(secTop - 34 - (clientLines.length - 1) * 14, metaTop - meta.length * 15) - 20;
+  page.drawRectangle({ x: margin, y: bodyTop, width: right - margin, height: 0.8, color: col(line) });
+  let y = bodyTop - 22;
+
+  // ===================== Items table =====================
+  const cols = [margin, right - 330, right - 228, right - 128];
+  const colRight = [right - 360, right - 260, right - 160, right];
+  const headers = ["Description", "Qty", "Unit Price", "Amount"];
+  const rowH = compact ? 22 : 24;
+  const headH = compact ? 24 : 26;
+  const tableHeaderFill = minimal ? WHITE : mix(supporting, primary, 0.08);
+
+  page.drawRectangle({ x: margin, y: y - headH, width: right - margin, height: headH, color: col(tableHeaderFill) });
+  page.drawRectangle({ x: margin, y: y - headH, width: right - margin, height: 0.8, color: col(line) });
+  headers.forEach((h, i) => text(h, cols[i] + 6, y - 17, bold, 8.5, primary));
+  y -= headH;
+
+  /** Starts a fresh page when the current one runs out of room. */
+  const ensureSpace = (needed: number, repeatHeader = true) => {
+    if (y - needed >= 92) return;
+    page = doc.addPage([595.28, 841.89]);
+    y = height - 60;
+    if (!repeatHeader) return;
+    page.drawRectangle({ x: margin, y: y - headH, width: right - margin, height: headH, color: col(tableHeaderFill) });
+    page.drawRectangle({ x: margin, y: y - headH, width: right - margin, height: 0.8, color: col(line) });
+    headers.forEach((h, i) => text(h, cols[i] + 6, y - 17, bold, 8.5, primary));
+    y -= headH;
+  };
+
+  const items = (invoice.items as Array<{ description: string; quantity: number; unitPrice: number }>) || [];
+  const descX = cols[0] + 6;
+  const descMaxW = colRight[0] - descX - 8;
+
+  items.forEach((item, itemIndex) => {
+    const displayLines: Array<{ prefix: string; runs: Run[] }> = [];
+    const blocks = parseRich(item.description);
+    for (const block of blocks) {
+      const prefix = block.kind === "bullet" ? "• " : block.kind === "ordered" ? `${block.num}. ` : "";
+      const prefixW = font.widthOfTextAtSize(prefix, 9.5);
+      const wrapped = wrapRuns(block.runs, descMaxW - prefixW, { font, bold, italic, boldItalic });
+      wrapped.forEach((runs, li) => displayLines.push({ prefix: li === 0 ? prefix : "", runs }));
+      if (!wrapped.length) displayLines.push({ prefix, runs: block.runs });
+    }
+    if (!displayLines.length) displayLines.push({ prefix: "", runs: [{ t: "", b: false, i: false, u: false }] });
+
+    const rowHeight = Math.max(rowH, displayLines.length * 13 + 10);
+    ensureSpace(rowHeight);
+    if (!minimal && design.layout !== "elegant" && itemIndex % 2 === 1) {
+      page.drawRectangle({ x: margin, y: y - rowHeight, width: right - margin, height: rowHeight, color: col(softFill) });
+    }
+
+    rightText(String(item.quantity), colRight[1], y - 15, font, 9.5, ink);
+    rightText(money(item.unitPrice, invoice.currency), colRight[2], y - 15, font, 9.5, ink);
+    rightText(money(item.quantity * item.unitPrice, invoice.currency), colRight[3], y - 15, font, 9.5, ink);
+
+    displayLines.forEach((lineItem, li) => {
+      const prefixW = lineItem.prefix ? font.widthOfTextAtSize(lineItem.prefix, 9.5) : 0;
+      if (lineItem.prefix) text(lineItem.prefix, descX, y - 15 - li * 13, font, 9.5, ink);
+      let x = descX + prefixW;
+      for (const run of lineItem.runs) {
+        const f = runFont(run.b, run.i);
+        const rt = san(run.t);
+        const wdt = f.widthOfTextAtSize(rt, 9.5);
+        page.drawText(rt, { x, y: y - 15 - li * 13, size: 9.5, font: f, color: col(ink) });
+        if (run.u) page.drawRectangle({ x, y: y - 16.6 - li * 13, width: wdt, height: 0.7, color: col(ink) });
+        x += wdt;
+      }
+    });
+
+    y -= rowHeight;
+    page.drawRectangle({ x: margin, y, width: right - margin, height: 0.7, color: col(line) });
+  });
+
+  y -= 18;
+  // Keep the totals block together instead of splitting it across pages.
+  ensureSpace(150);
+
+  // ===================== Totals =====================
+  const totalW = compact ? 200 : 220;
+  const totalX = right - totalW;
+  const totalRows: Array<[string, string, boolean]> = [
+    ["Subtotal", money(invoice.subtotal, invoice.currency), false],
+    [`Tax (${invoice.taxRate}%)`, money(invoice.taxAmount, invoice.currency), false],
+  ];
+  if (Number(invoice.discountAmount) > 0) totalRows.push(["Discount", `- ${money(invoice.discountAmount, invoice.currency)}`, false]);
+  totalRows.push(["TOTAL", money(invoice.total, invoice.currency), true]);
+
+  for (const [k, v, isTotal] of totalRows) {
+    if (isTotal) {
+      y -= 8;
+      const panelH = compact ? 34 : 38;
+      const isPremiumPanel = design.layout === "premium";
+      const isCorporatePanel = design.layout === "corporate";
+      const panelFill = isPremiumPanel ? primary : isCorporatePanel ? mix(supporting, primary, 0.12) : mix(accent, WHITE, 0.86);
+      const panelText = isPremiumPanel ? WHITE : primary;
+      page.drawRectangle({ x: totalX, y: y - panelH + 16, width: totalW, height: panelH, color: col(panelFill) });
+      if (isCorporatePanel) {
+        page.drawRectangle({ x: totalX, y: y - panelH + 16, width: totalW, height: panelH, borderColor: col(primary), borderWidth: 0.8 });
+      }
+      text(k, totalX + 10, y - 8, bold, 12, panelText);
+      rightText(v, right - 10, y - 8, bold, 13, panelText);
+      y -= panelH - 4;
+    } else {
+      text(k, totalX + 6, y, font, 9.5, muted);
+      rightText(v, right, y, font, 10, ink);
+      y -= 18;
+    }
+  }
+
+  // ===================== Notes =====================
+  if (invoice.notes) {
+    ensureSpace(90, false);
+    y -= 10;
+    text("NOTES", margin, y, bold, 8, secondary);
+    y -= 15;
+    const noteLines = wrapText(invoice.notes, right - margin - 40, font, 9.5);
+    noteLines.slice(0, 4).forEach((lineText, i) => text(lineText, margin, y - i * 13, font, 9.5, muted));
+  }
+
+  // ===================== Footer =====================
+  const footH = compact ? 48 : 56;
+  const footTop = footH;
+  if (headerDark) {
+    page.drawRectangle({ x: 0, y: 0, width, height: footH, color: col(primary) });
+    page.drawRectangle({ x: 0, y: footH - 3, width, height: 3, color: col(design.layout === "corporate" ? secondary : accent) });
+  } else {
+    page.drawRectangle({ x: 0, y: footH - 1, width, height: 1, color: col(line) });
+    page.drawRectangle({ x: 0, y: footH - 4, width, height: 3, color: col(accent) });
+  }
+  const footText = brand?.pdfFooter?.trim() || `Thank you for your business. ${brandName}`;
+  const footLines = wrapText(footText, right - margin - 180, font, 9.5);
+  const footContact = [brandWebsite, brandEmail, brandPhone, brandAddress].filter(Boolean).join("   |   ");
+  const footTextColor = headerDark ? WHITE : ink;
+  const footMutedColor = headerDark ? mix(WHITE, primary, 0.72) : muted;
+  text(fitText(footLines[0] || "", right - margin - 180, font, 9.5), margin, footTop - 20, font, 9.5, footTextColor);
+  if (footLines[1]) text(fitText(footLines[1], right - margin - 180, font, 9.5), margin, footTop - 34, font, 9.5, footTextColor);
+  if (footContact) text(fitText(footContact, right - margin - 180, font, 8.5), margin, 12, font, 8.5, footMutedColor);
+  rightText(brandName.toUpperCase(), right, 18, bold, 8.5, headerDark ? mix(accent, WHITE, 0.35) : secondary);
 
   return doc.save();
 }

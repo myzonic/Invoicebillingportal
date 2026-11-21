@@ -41,6 +41,33 @@ export interface Client {
   createdAt: string;
 }
 
+/** Invoice layouts offered by the branding designer. `legacy` is the original black/gold look. */
+export type InvoiceLayout =
+  | "legacy"
+  | "modern"
+  | "minimal"
+  | "corporate"
+  | "elegant"
+  | "premium"
+  | "creative"
+  | "compact";
+
+export interface InvoiceDesignColors {
+  /** Ink, header bands, total panels. */
+  primary: string;
+  /** Headings, labels, section titles. */
+  secondary: string;
+  /** Totals, CTA, hairline emphasis. */
+  accent: string;
+  /** Tinted panels, table fills, backgrounds. */
+  supporting: string;
+}
+
+export interface InvoiceDesign {
+  layout: InvoiceLayout;
+  colors: InvoiceDesignColors;
+}
+
 export interface Brand {
   id: string;
   name: string;
@@ -55,6 +82,10 @@ export interface Brand {
   logoUrl?: string | null;
   /** Brand accent color; overrides per-invoice color on client-facing pages/PDF. */
   color?: string | null;
+  /** Dominant colors extracted from the uploaded logo, e.g. ["#111827", "#d4a72c"]. */
+  logoPalette?: string[] | null;
+  /** Saved per-brand invoice design; `null` keeps the original classic look. */
+  invoiceDesign?: InvoiceDesign | null;
   currency: string;
   email?: string;
   phone?: string;
@@ -107,6 +138,8 @@ export interface Invoice {
   total: number;
   currency: string;
   color?: string | null;
+  /** Optional invoice-level design override; never mutates the brand defaults. */
+  designOverride?: InvoiceDesign | null;
   status: InvoiceStatus;
   notes?: string;
   issueDate: string;

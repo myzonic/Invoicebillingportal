@@ -2,9 +2,11 @@
 import { ArrowRight, FileText, Lock } from "lucide-react";
 import { usePublicInvoiceQuery } from "@/app/apiSlice";
 import { brandColor, formatDate, money, rgba, richText, shade } from "@/lib/utils";
+import { resolveInvoiceDesign } from "@/lib/invoiceDesign";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner, EmptyState } from "@/components/ui/table";
 import Logo from "@/components/Logo";
+import { DesignedInvoiceView } from "@/components/invoice/DesignedInvoiceView";
 import { branding } from "@/config/branding";
 
 export default function PaymentLink() {
@@ -18,6 +20,39 @@ export default function PaymentLink() {
   const inv = data.data;
   const brand = inv.brand;
   const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number }[];
+
+  // Brands with a saved design get the premium sheet; everyone else keeps the
+  // original client-facing look (historical invoices are never restyled).
+  const design = resolveInvoiceDesign(inv, brand);
+  if (design && design.layout !== "legacy") {
+    return (
+      <DesignedInvoiceView
+        data={{
+          number: inv.number || "",
+          items,
+          subtotal: Number(inv.subtotal || 0),
+          taxRate: Number(inv.taxRate || 0),
+          taxAmount: Number(inv.taxAmount || 0),
+          discountAmount: Number(inv.discountAmount || 0),
+          total: Number(inv.total || 0),
+          currency: inv.currency || "USD",
+          status: inv.status || "",
+          paymentState: inv.paymentState,
+          issueDate: inv.issueDate || "",
+          dueDate: inv.dueDate || "",
+          notes: inv.notes,
+          client: inv.client || null,
+          brand: inv.brand || null,
+          company: inv.company || { name: branding.defaultBrandName, email: "", phone: "", address: "", website: "" },
+        }}
+        design={design}
+        pdfUrl={`/api/payments/public/${inv.publicToken || id}/pdf`}
+        onPay={() => navigate(`/invoice/checkout/${inv.publicToken || inv.id}`)}
+        paid={inv.status === "PAID"}
+      />
+    );
+  }
+
   const accent = brandColor(brand?.color || inv.color);
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);

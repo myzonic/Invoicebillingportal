@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ImagePlus, Trash2 } from "lucide-react";
+import { History, ImagePlus, Trash2 } from "lucide-react";
 import {
   useBrandQuery,
   useCreateBrandMutation,
@@ -10,6 +10,13 @@ import {
   useRatesQuery,
 } from "@/app/apiSlice";
 import { errorMessage } from "@/lib/utils";
+import {
+  DEFAULT_INVOICE_DESIGN,
+  extractLogoPalette,
+  normalizeInvoiceDesign,
+  suggestColors,
+} from "@/lib/invoiceDesign";
+import type { InvoiceDesign } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +24,7 @@ import { Textarea, Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/table";
+import { InvoiceDesignEditor } from "@/components/invoiceDesign/InvoiceDesignEditor";
 
 const FALLBACK_CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 const BRAND_COLORS = ["#111111", "#374151", "#2563eb", "#0d9488", "#16a34a", "#7c3aed", "#dc2626", "#db2777", "#f97316"];
@@ -73,6 +81,44 @@ export default function BrandForm() {
   const [preview, setPreview] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // ---- Per-brand invoice design (stored as additive JSON on the brand) ----
+  const [design, setDesign] = useState<InvoiceDesign>(DEFAULT_INVOICE_DESIGN);
+  const [savedDesign, setSavedDesign] = useState<InvoiceDesign | null>(null);
+  const [designTouched, setDesignTouched] = useState(false);
+  const [palette, setPalette] = useState<string[]>([]);
+  const [savedPalette, setSavedPalette] = useState<string[]>([]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState("");
+  const designTouchedRef = useRef(false);
+  const savedDesignRef = useRef<InvoiceDesign | null>(null);
+
+  /** Reads the dominant colours out of a logo and (optionally) seeds the roles. */
+  const runExtraction = async (src: string, seedRoles = false) => {
+    if (!src) return;
+    setExtracting(true);
+    setExtractNote("");
+    try {
+      const colors = await extractLogoPalette(src);
+      if (!colors.length) {
+        setExtractNote("Couldn't read the logo colours automatically — pick them below.");
+        return;
+      }
+      setPalette(colors);
+      setExtractNote(`Detected ${colors.length} colour${colors.length > 1 ? "s" : ""} from the logo.`);
+      // Only a brand that has never been designed gets its roles seeded, and
+      // only when the user has not already chosen colours by hand.
+      if (seedRoles && !designTouchedRef.current && !savedDesignRef.current) {
+        designTouchedRef.current = true;
+        setDesignTouched(true);
+        setDesign((d) => ({ ...d, colors: suggestColors(colors) }));
+      }
+    } catch {
+      setExtractNote("Couldn't read the logo colours automatically — pick them below.");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   useEffect(() => {
     if (brandData) {
       const b = brandData.data;
@@ -96,15 +142,55 @@ export default function BrandForm() {
         logoUrl: b.logoUrl || "",
       });
       setPreview(b.logoUrl || "");
+
+      const stored = normalizeInvoiceDesign(b.invoiceDesign);
+      const storedPalette = Array.isArray(b.logoPalette) ? b.logoPalette : [];
+      savedDesignRef.current = stored;
+      designTouchedRef.current = false;
+      setSavedDesign(stored);
+      setDesign(stored ?? DEFAULT_INVOICE_DESIGN);
+      setDesignTouched(false);
+      setPalette(storedPalette);
+      setSavedPalette(storedPalette);
+      setExtractNote("");
+      // No saved palette yet: scan the stored logo once so the colours show up.
+      if (!storedPalette.length && b.logoUrl) void runExtraction(b.logoUrl);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandData]);
 
   useEffect(() => {
     if (!logoFile) return;
     const url = URL.createObjectURL(logoFile);
     setPreview(url);
+    // A freshly uploaded logo seeds the colour roles for a brand that has
+    // never been designed; existing designs stay untouched.
+    void runExtraction(url, true);
     return () => URL.revokeObjectURL(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logoFile]);
+
+  const handleDesignChange = (next: InvoiceDesign) => {
+    designTouchedRef.current = true;
+    setDesignTouched(true);
+    setDesign(next);
+  };
+
+  const resetDesign = () => {
+    designTouchedRef.current = false;
+    setDesignTouched(false);
+    setDesign(savedDesign ?? DEFAULT_INVOICE_DESIGN);
+    setPalette(savedPalette);
+    setExtractNote(savedPalette.length ? "Restored the saved logo colours." : "");
+  };
+
+  /** Revert option: drop the redesign and go back to the original invoice look. */
+  const useClassicDesign = () => {
+    designTouchedRef.current = true;
+    setDesignTouched(true);
+    setDesign({ layout: "legacy", colors: (savedDesign ?? DEFAULT_INVOICE_DESIGN).colors });
+    setExtractNote("Classic look selected — save changes to revert this brand's invoices.");
+  };
 
   const set = (key: keyof typeof form, value: unknown) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -146,6 +232,10 @@ export default function BrandForm() {
         paymentSubdomain: subdomain,
         paymentSettings: form.paymentEnabled ? {} : { disabled: true },
         logoUrl,
+        logoPalette: palette,
+        // New brands always store a design; existing brands only when the
+        // design section was touched, so unrelated edits never restyle them.
+        ...(isEdit ? (designTouched ? { invoiceDesign: design } : {}) : { invoiceDesign: design }),
       };
       if (isEdit) {
         await updateBrand({ id: id!, body }).unwrap();
@@ -163,7 +253,7 @@ export default function BrandForm() {
   if (loadingBrand) return <Spinner />;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <PageHeader title={isEdit ? "Edit Brand" : "Add Brand"} />
       <Card>
         <CardContent>
@@ -210,6 +300,8 @@ export default function BrandForm() {
                       onClick={() => {
                         setLogoFile(null);
                         setPreview("");
+                        setPalette([]);
+                        setExtractNote("");
                         setForm((f) => ({ ...f, logoUrl: "" }));
                       }}
                     >
@@ -249,6 +341,31 @@ export default function BrandForm() {
                 </div>
               </div>
             </Field>
+
+            <div className="space-y-1 pt-2">
+              <h3 className="text-sm font-semibold">Invoice design</h3>
+              <p className="text-xs text-muted-foreground">
+                Colours are detected from this brand's logo and applied to its client-facing invoice page and A4 PDF.
+                Saved per brand — other brands are never affected.
+              </p>
+            </div>
+            <InvoiceDesignEditor
+              value={design}
+              onChange={handleDesignChange}
+              palette={palette}
+              logoUrl={preview || undefined}
+              businessName={form.businessName || form.name || "Your Company"}
+              savedDesign={savedDesign}
+              onReset={resetDesign}
+              onExtract={() => void runExtraction(preview)}
+              extracting={extracting}
+              extractNote={extractNote}
+              actions={
+                <Button type="button" variant="ghost" size="sm" onClick={useClassicDesign} title="Revert this brand to the original invoice look">
+                  <History className="size-3.5" /> Use classic design
+                </Button>
+              }
+            />
 
             <div className="space-y-1 pt-2">
               <h3 className="text-sm font-semibold">Domain & payment link</h3>

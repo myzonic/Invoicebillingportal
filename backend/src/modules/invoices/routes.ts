@@ -30,6 +30,7 @@ const invoiceSchema = z.object({
   discountAmount: z.number().nonnegative().default(0),
   currency: z.string().min(3).max(3).optional(),
   color: z.string().optional(),
+  designOverride: z.unknown().optional(),
   notes: z.string().optional(),
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date().optional(),
@@ -149,6 +150,13 @@ function escapeHtml(value: unknown) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/** `undefined` leaves the stored JSON untouched; `null` clears an invoice override. */
+function jsonUpdateValue(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null) return Prisma.DbNull;
+  return value;
 }
 
 /** Convert a payment back into the invoice's own currency using its stored snapshot. */
@@ -557,6 +565,7 @@ router.post(
             // Brand colour is read live from the brand, so invoices inherit it
             // without copying a stale value at creation time.
             color: body.color || undefined,
+            designOverride: body.designOverride ?? undefined,
             notes: body.notes,
             issueDate: body.issueDate,
             dueDate: body.dueDate,
@@ -608,6 +617,7 @@ router.post(
       total,
       currency,
       color: body.color || brand.color || null,
+      designOverride: body.designOverride ?? null,
       status: body.status || InvoiceStatus.DRAFT,
       notes: body.notes || null,
       issueDate: body.issueDate,
@@ -671,6 +681,7 @@ router.put(
         total,
         currency,
         color: body.color || undefined,
+        designOverride: jsonUpdateValue(body.designOverride),
         notes: body.notes,
         issueDate: body.issueDate,
         dueDate: body.dueDate,
