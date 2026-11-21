@@ -251,7 +251,7 @@ export default function SquareCheckout() {
               <Logo
                 src={brand?.logoUrl}
                 alt={brandName}
-                className="h-auto max-h-12 w-auto max-w-[150px] shrink-0 object-contain"
+                className="h-auto max-h-[70px] w-auto max-w-[200px] shrink-0 object-contain"
               />
               <div className="min-w-0">
                 <div className="truncate text-xl font-bold tracking-tight" style={{ color: headerText }}>
@@ -301,27 +301,33 @@ export default function SquareCheckout() {
               </div>
             </div>
 
-            <table className="mt-8 w-full text-sm">
+            <table className="mt-8 w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[46%]" />
+                <col className="w-[12%]" />
+                <col className="w-[21%]" />
+                <col className="w-[21%]" />
+              </colgroup>
               <thead>
                 <tr
                   className="border-y text-[11px] uppercase tracking-wide"
                   style={{ borderColor: line, background: tableHeaderFill, color: secondary }}
                 >
-                  <th className="py-2.5 text-left font-bold">Description</th>
-                  <th className="py-2.5 text-right font-bold">Qty</th>
-                  <th className="py-2.5 text-right font-bold">Unit Price</th>
-                  <th className="py-2.5 text-right font-bold">Amount</th>
+                  <th className="py-2.5 pl-0 pr-3 text-left font-bold">Description</th>
+                  <th className="py-2.5 px-3 text-right font-bold">Qty</th>
+                  <th className="py-2.5 px-3 text-right font-bold">Unit Price</th>
+                  <th className="py-2.5 pr-0 pl-3 text-right font-bold">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, i) => (
                   <tr key={i} className="border-b" style={{ borderColor: line, background: t && !t.minimal && i % 2 === 1 ? t.softFill : "transparent" }}>
-                    <td className="py-2.5" style={{ color: ink }}>
+                    <td className="py-2.5 pl-0 pr-3 align-top" style={{ color: ink }}>
                       <span className="richtext" dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
                     </td>
-                    <td className="py-2.5 text-right" style={{ color: ink }}>{item.quantity}</td>
-                    <td className="py-2.5 text-right" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
-                    <td className="py-2.5 text-right font-medium" style={{ color: ink }}>{money(itemNet(item), inv.currency)}</td>
+                    <td className="py-2.5 px-3 text-right align-top" style={{ color: ink }}>{item.quantity}</td>
+                    <td className="py-2.5 px-3 text-right align-top" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
+                    <td className="py-2.5 pl-3 pr-0 text-right font-medium align-top" style={{ color: ink }}>{money(itemNet(item), inv.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -390,7 +396,7 @@ export default function SquareCheckout() {
                 <Logo
                   src={brand?.logoUrl}
                   alt={brand?.name}
-                  className="h-auto max-h-10 w-auto max-w-[110px] shrink-0 object-contain"
+                  className="h-auto max-h-14 w-auto max-w-[170px] shrink-0 object-contain"
                 />
                 <div>
                   <p className="text-sm font-bold leading-tight text-neutral-900">
