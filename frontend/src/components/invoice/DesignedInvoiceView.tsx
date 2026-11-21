@@ -33,6 +33,7 @@ export interface DesignedInvoiceData {
   } | null;
   company?: { name: string; email: string; phone: string; address: string; website: string };
   builderData?: {
+    paperSize?: "A4" | "LETTER";
     shipping?: number;
     paymentTerms?: string;
     paymentInstructions?: string;
@@ -85,6 +86,7 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
       <div className="relative w-full max-w-[820px]">
         <InvoiceDesignPreview
           design={design}
+          paperSize={builder?.paperSize}
           logoUrl={brand?.logoUrl}
           businessName={businessName}
           clientName={builder?.clientName || data.client?.name || "Customer"}

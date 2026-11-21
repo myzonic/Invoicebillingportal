@@ -36,8 +36,11 @@ function invoiceStatusText(invoice: Invoice): string {
   return statusLabel(effectiveInvoiceStatus(invoice, payments));
 }
 
-const A4_SIZE: [number, number] = [595.28, 841.89];
-const LETTER_SIZE: [number, number] = [612, 792];
+// Exact PDF point geometry: 1 inch = 72pt, 1 inch = 25.4mm.
+// A4 = 210 x 297 mm (8.27 x 11.69 in), Letter = 8.5 x 11 in.
+const MM_TO_PT = 72 / 25.4;
+const A4_SIZE: [number, number] = [210 * MM_TO_PT, 297 * MM_TO_PT];
+const LETTER_SIZE: [number, number] = [8.5 * 72, 11 * 72];
 
 /** Item amount after its own line discount. */
 function itemNet(item: { quantity: number; unitPrice: number; discount?: number }): number {
