@@ -22,10 +22,7 @@ export type EditablePreviewField =
   | "dueDate"
   | "notes"
   | "paymentInstructions"
-  | "terms"
-  | "taxRate"
-  | "discountAmount"
-  | "shipping";
+  | "terms";
 
 export interface InvoicePreviewEditor {
   onField: (field: EditablePreviewField, value: string) => void;
@@ -116,7 +113,7 @@ export function EditableRichText({
       role="button"
       tabIndex={0}
       title="Click to edit description"
-      onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}
+      onClick={() => { setEditing(true); ref.current?.focus(); }}
       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && editing) { e.preventDefault(); ref.current?.blur(); } }}
       onBlur={() => {
         setEditing(false);
@@ -150,16 +147,12 @@ interface PreviewProps {
   className?: string;
   /** Real values supplied by the builder make the preview match the PDF. */
   subtotal?: number;
-  taxRate?: number;
   taxAmount?: number;
   discountAmount?: number;
   totalAmount?: number;
   shipping?: number;
   customerEmail?: string;
   customerAddress?: string;
-  /** Brand address/header lines saved in Brand settings. */
-  brandAddress?: string;
-  brandHeader?: string;
   paymentInstructions?: string;
   terms?: string;
   /** When provided, the document itself becomes click-to-edit. */
@@ -214,15 +207,12 @@ export function InvoiceDesignPreview({
   contactLine = "hello@acmestudio.com  ·  +1 (555) 010 2233  ·  acmestudio.com",
   footerText = "Thank you for your business.",
   subtotal,
-  taxRate = 0,
   taxAmount,
   discountAmount = 0,
   totalAmount,
   shipping = 0,
   customerEmail,
   customerAddress,
-  brandAddress,
-  brandHeader,
   paymentInstructions,
   terms,
   editor,
@@ -237,7 +227,6 @@ export function InvoiceDesignPreview({
     );
   const t = tones(design);
   const layout = design.layout;
-  const headerLines = (brandHeader || "").split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 2);
   const calcSubtotal = subtotal ?? items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
   const calcTax = taxAmount ?? calcSubtotal * 0.1;
   const calcTotal = totalAmount ?? Math.max(0, calcSubtotal + calcTax - Number(discountAmount) + Number(shipping));
@@ -263,22 +252,22 @@ export function InvoiceDesignPreview({
       <div className="relative">
         {layout === "corporate" || layout === "premium" ? (
           <div className="px-5 py-4" style={{ background: t.primary, borderTop: `3px solid ${t.accent}`, borderBottom: `3px solid ${mixHex(t.secondary, t.primary, 0.35)}` }}>
-            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} brandAddress={brandAddress} headerLines={headerLines} editor={editor} dark />
+            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} dark />
           </div>
         ) : layout === "creative" ? (
           <div className="relative px-5 py-4" style={{ borderTop: `4px solid ${t.accent}` }}>
             <div className="absolute inset-y-0 left-0" style={{ width: "44%", background: mixHex(t.accent, t.supporting, 0.35) }} />
             <div className="relative">
-              <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} brandAddress={brandAddress} headerLines={headerLines} editor={editor} block />
+              <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} block />
             </div>
           </div>
         ) : layout === "minimal" ? (
           <div className="px-5 pt-5 pb-3">
-            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} brandAddress={brandAddress} headerLines={headerLines} editor={editor} rule />
+            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} rule />
           </div>
         ) : (
           <div className="px-5 pt-5 pb-3" style={{ borderTop: `4px solid ${t.primary}`, borderBottom: `1px solid ${t.line}` }}>
-            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} brandAddress={brandAddress} headerLines={headerLines} editor={editor} />
+            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} />
           </div>
         )}
       </div>
@@ -439,39 +428,19 @@ export function InvoiceDesignPreview({
               <span style={{ color: t.ink }}>{money(calcSubtotal, currency)}</span>
             </div>
             <div className="flex justify-between">
-              <span style={{ color: t.muted }}>
-                {editor ? (
-                  <>
-                    Tax (<EditableText value={String(taxRate)} onCommit={(v) => onField("taxRate", v)} type="number" />)%
-                  </>
-                ) : (
-                  `Tax${Number(taxRate) ? ` (${taxRate}%)` : ""}`
-                )}
-              </span>
+              <span style={{ color: t.muted }}>Tax</span>
               <span style={{ color: t.ink }}>{money(calcTax, currency)}</span>
             </div>
-            {(editor || Number(discountAmount) > 0) && (
+            {Number(discountAmount) > 0 && (
               <div className="flex justify-between">
                 <span style={{ color: t.muted }}>Discount</span>
-                <span style={{ color: t.ink }}>
-                  {editor ? (
-                    <EditableText value={String(discountAmount)} onCommit={(v) => onField("discountAmount", v)} type="number" />
-                  ) : (
-                    `- ${money(discountAmount, currency)}`
-                  )}
-                </span>
+                <span style={{ color: t.ink }}>- {money(discountAmount, currency)}</span>
               </div>
             )}
-            {(editor || Number(shipping) > 0) && (
+            {Number(shipping) > 0 && (
               <div className="flex justify-between">
                 <span style={{ color: t.muted }}>Shipping</span>
-                <span style={{ color: t.ink }}>
-                  {editor ? (
-                    <EditableText value={String(shipping)} onCommit={(v) => onField("shipping", v)} type="number" />
-                  ) : (
-                    money(shipping, currency)
-                  )}
-                </span>
+                <span style={{ color: t.ink }}>{money(shipping, currency)}</span>
               </div>
             )}
           </div>
@@ -522,8 +491,6 @@ function HeaderContent({
   invoiceNumber,
   logoUrl,
   contactLine,
-  brandAddress,
-  headerLines,
   editor,
   dark,
   block,
@@ -534,8 +501,6 @@ function HeaderContent({
   invoiceNumber: string;
   logoUrl?: string | null;
   contactLine: string;
-  brandAddress?: string;
-  headerLines?: string[];
   editor?: InvoicePreviewEditor;
   dark?: boolean;
   block?: boolean;
@@ -567,16 +532,6 @@ function HeaderContent({
           <div className="truncate" style={{ fontSize: 9, color: onDark ? t.onDarkMuted : t.muted }}>
             {contactLine}
           </div>
-          {brandAddress && (
-            <div className="truncate" style={{ fontSize: 9, color: onDark ? t.onDarkMuted : t.muted }}>
-              {brandAddress.replace(/\n/g, " · ")}
-            </div>
-          )}
-          {headerLines?.map((line, i) => (
-            <div key={i} className="truncate font-medium" style={{ fontSize: 9, color: onDark ? t.onDarkMuted : t.secondary }}>
-              {line}
-            </div>
-          ))}
           {rule && <div className="mt-1.5" style={{ height: 2, width: 44, background: t.accent }} />}
         </div>
       </div>

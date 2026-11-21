@@ -33,9 +33,6 @@ export const DEFAULT_INVOICE_DESIGN: InvoiceDesign = {
   },
 };
 
-/** The portal now ships one clean document style for every new invoice. */
-export const SINGLE_INVOICE_LAYOUT: InvoiceLayout = "minimal";
-
 export const COLOR_ROLES: Array<{ key: keyof InvoiceDesignColors; label: string; hint: string }> = [
   { key: "primary", label: "Primary", hint: "Header, ink, total panel" },
   { key: "secondary", label: "Secondary", hint: "Headings and labels" },
@@ -69,30 +66,6 @@ export function normalizeInvoiceDesign(value: unknown): InvoiceDesign | null {
       secondary: hex(colorsRaw.secondary, DEFAULT_INVOICE_DESIGN.colors.secondary),
       accent: hex(colorsRaw.accent, DEFAULT_INVOICE_DESIGN.colors.accent),
       supporting: hex(colorsRaw.supporting, DEFAULT_INVOICE_DESIGN.colors.supporting),
-    },
-  };
-}
-
-/**
- * The one design used by the minimal editor, saved invoice, PDF and customer
- * page. Layout is always the same; only the selected brand's saved colours are
- * carried across. When a brand has no saved design we derive a quiet palette
- * from its accent colour / logo palette.
- */
-export function designForBrand(
-  brand?: Pick<Brand, "invoiceDesign" | "color" | "logoPalette"> | null,
-): InvoiceDesign {
-  const saved = normalizeInvoiceDesign(brand?.invoiceDesign);
-  if (saved) return { layout: SINGLE_INVOICE_LAYOUT, colors: saved.colors };
-
-  const base = hex(brand?.color || brand?.logoPalette?.[0], DEFAULT_INVOICE_DESIGN.colors.primary);
-  return {
-    layout: SINGLE_INVOICE_LAYOUT,
-    colors: {
-      primary: base,
-      secondary: tint(base, -0.18),
-      accent: tint(base, 0.28),
-      supporting: tint(base, 0.92),
     },
   };
 }

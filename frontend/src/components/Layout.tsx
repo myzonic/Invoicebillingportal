@@ -1,6 +1,22 @@
 import { useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Plus, LogOut, Menu, ChevronLeft } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  FileText,
+  Send,
+  Zap,
+  Boxes,
+  Store,
+  BadgeDollarSign,
+  ShieldCheck,
+  KeyRound,
+  ScrollText,
+  Settings,
+  LogOut,
+  Menu,
+  ChevronLeft,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppDispatch, useAppSelector } from "@/app/store";
 import { reset } from "@/features/auth/authSlice";
@@ -10,10 +26,19 @@ import { useMeQuery } from "@/app/apiSlice";
 import Logo from "@/components/Logo";
 import { branding } from "@/config/branding";
 
-// The portal has one focused workflow. Other routes remain registered for
-// existing links and public payment pages, but the sidebar only offers Create.
-const NAV: Array<{ to: string; label: string; icon: typeof Plus; module: string; adminOnly?: boolean }> = [
-  { to: "/dashboard/create", label: "Create", icon: Plus, module: "invoices" },
+const NAV = [
+  { to: "/dashboard/main", label: "Overview", icon: LayoutDashboard, module: "dashboard" },
+  { to: "/dashboard/clients", label: "Clients", icon: Users, module: "clients" },
+  { to: "/dashboard/invoices", label: "Invoices", icon: FileText, module: "invoices" },
+  { to: "/dashboard/direct-invoice", label: "Direct Invoice", icon: Zap, module: "invoices" },
+  { to: "/dashboard/invoice-logs", label: "Invoice Logs", icon: Send, module: "invoices" },
+  { to: "/dashboard/brand-management", label: "Brands", icon: Boxes, module: "brands" },
+  { to: "/dashboard/merchant-management", label: "Merchants", icon: Store, module: "merchants" },
+  { to: "/dashboard/merchant-records", label: "Merchant Records", icon: BadgeDollarSign, module: "merchants" },
+  { to: "/dashboard/user-management", label: "Users", icon: ShieldCheck, module: "users" },
+  { to: "/dashboard/roles", label: "Roles & Permissions", icon: KeyRound, module: "roles" },
+  { to: "/dashboard/logs", label: "Logs", icon: ScrollText, module: "logs" },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings, module: "settings", adminOnly: true },
 ];
 
 export default function Layout() {
