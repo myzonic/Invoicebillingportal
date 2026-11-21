@@ -497,7 +497,6 @@ export default function InvoiceBuilder() {
 
   const previewProps = {
     design: effectiveDesign,
-    paperSize: builder.paperSize,
     logoUrl: selectedBrand?.logoUrl,
     businessName,
     clientName: builder.clientName || selectedClient?.name || "Customer",
@@ -567,7 +566,7 @@ export default function InvoiceBuilder() {
       </div>
       <div className="max-h-[calc(100vh-11.5rem)] overflow-y-auto bg-neutral-50 p-3 sm:p-4">
         {pdfMode === "live" ? (
-          <div className="mx-auto w-full max-w-[210mm]">
+          <div className="mx-auto w-full max-w-[794px]">
             <InvoiceDesignPreview {...previewProps} className="!shadow-none" />
           </div>
         ) : pdfUrl ? (

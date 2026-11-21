@@ -150,8 +150,6 @@ interface PreviewProps {
   brandHeader?: string;
   footerText?: string;
   className?: string;
-  /** Physical page geometry, matching the PDF renderer. */
-  paperSize?: "A4" | "LETTER";
   /** Real values supplied by the builder make the preview match the PDF. */
   subtotal?: number;
   taxRate?: number;
@@ -228,7 +226,6 @@ export function InvoiceDesignPreview({
   terms,
   editor,
   className = "",
-  paperSize = "A4",
 }: PreviewProps) {
   const onField = (field: EditablePreviewField, value: string) => editor?.onField(field, value);
   const edit = (value: string, field: EditablePreviewField, style?: React.CSSProperties, multiline?: boolean, type?: string) =>
@@ -252,21 +249,13 @@ export function InvoiceDesignPreview({
     textTransform: "uppercase",
     color: t.secondary,
   };
-  // Physical page geometry, identical to the PDF MediaBox. CSS mm keeps the
-  // document A4-sized on screen and when the browser prints at 100%.
-  const pageStyle: React.CSSProperties = {
-    width: paperSize === "LETTER" ? "215.9mm" : "210mm",
-    minHeight: paperSize === "LETTER" ? "279.4mm" : "297mm",
-    maxWidth: "100%",
-    boxSizing: "border-box",
-  };
 
-  if (layout === "legacy") return <LegacyInvoicePreview className={className} paperSize={paperSize} logoUrl={logoUrl} businessName={businessName} items={items} currency={currency} />;
+  if (layout === "legacy") return <LegacyInvoicePreview className={className} logoUrl={logoUrl} businessName={businessName} items={items} currency={currency} />;
 
   return (
     <div
-      className={`invoice-print-page overflow-hidden rounded-lg border bg-white text-left shadow-sm ${className}`}
-      style={{ ...pageStyle, borderColor: t.line, color: t.ink, fontSize: 11 }}
+      className={`overflow-hidden rounded-lg border bg-white text-left shadow-sm ${className}`}
+      style={{ borderColor: t.line, color: t.ink, fontSize: 11 }}
     >
       {/* ---------------- Header ---------------- */}
       <div className="relative">
@@ -599,14 +588,12 @@ function HeaderContent({
 
 function LegacyInvoicePreview({
   className = "",
-  paperSize = "A4",
   logoUrl,
   businessName,
   items,
   currency,
 }: {
   className?: string;
-  paperSize?: "A4" | "LETTER";
   logoUrl?: string | null;
   businessName: string;
   items: PreviewItem[];
@@ -615,16 +602,7 @@ function LegacyInvoicePreview({
   const gold = "#c9a227";
   const subtotal = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
   return (
-    <div
-      className={`invoice-print-page overflow-hidden rounded-lg border border-neutral-800 bg-white text-left shadow-sm ${className}`}
-      style={{
-        width: paperSize === "LETTER" ? "215.9mm" : "210mm",
-        minHeight: paperSize === "LETTER" ? "279.4mm" : "297mm",
-        maxWidth: "100%",
-        boxSizing: "border-box",
-        fontSize: 11,
-      }}
-    >
+    <div className={`overflow-hidden rounded-lg border border-neutral-800 bg-white text-left shadow-sm ${className}`} style={{ fontSize: 11 }}>
       <div className="flex items-center justify-between px-5 py-4" style={{ background: "#111111" }}>
         <div className="flex items-center gap-3">
           <div className="flex h-[42px] w-[84px] items-center justify-center bg-white">
