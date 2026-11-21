@@ -373,7 +373,7 @@ export default function BrandForm() {
             <div className="space-y-1 pt-2">
               <h3 className="text-sm font-semibold">Domain & payment link</h3>
               <p className="text-xs text-muted-foreground">
-                Each invoice for this brand gets a permanent link at <code>https://{paymentDomain || "pay.yourdomain.com"}/invoice/&#123;token&#125;</code>.
+                Each invoice for this brand gets a permanent link at <code>https://{paymentDomain || "pay.yourdomain.com"}/invoice/checkout/&#123;token&#125;</code>.
                 DNS and SSL for this host are configured outside the portal (see README).
               </p>
             </div>

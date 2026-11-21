@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { tokenStore } from "@/lib/api";
 import Layout from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -23,19 +23,24 @@ import Roles from "@/pages/roles/Roles";
 import RoleForm from "@/pages/roles/RoleForm";
 import Logs from "@/pages/Logs";
 import Settings from "@/pages/Settings";
-import PaymentLink from "@/pages/payments/PaymentLink";
 import SquareCheckout from "@/pages/payments/SquareCheckout";
 import PaymentResult from "@/pages/payments/PaymentResult";
+
+/** Old invoice permalinks keep working and land directly on checkout. */
+function InvoiceRedirect() {
+  const { id = "" } = useParams();
+  return <Navigate to={`/invoice/checkout/${id}`} replace />;
+}
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup/:token" element={<Signup />} />
-      <Route path="/invoice/payment-link/:id" element={<PaymentLink />} />
       <Route path="/invoice/checkout/:id" element={<SquareCheckout />} />
-      {/* Permanent branded permalink: pay.<domain>/invoice/<secure-token> */}
-      <Route path="/invoice/:id" element={<PaymentLink />} />
+      {/* Legacy permalink shapes still work: they go straight to checkout. */}
+      <Route path="/invoice/payment-link/:id" element={<InvoiceRedirect />} />
+      <Route path="/invoice/:id" element={<InvoiceRedirect />} />
       <Route path="/payment_success" element={<PaymentResult variant="success" />} />
       <Route path="/payment_cancel" element={<PaymentResult variant="cancel" />} />
 

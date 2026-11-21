@@ -18,9 +18,9 @@ function isBackendHere(): boolean {
     /* ignore invalid configured URL */
   }
   // White-label payment hosts are served by the backend container. Keep
-  // uploads same-origin there so CSP/CORP never blocks the logo. Vercel's
-  // public /invoice/:token pages are not on a pay.* host, so they still use
-  // the absolute API URL.
+  // uploads same-origin there so CSP/CORP never blocks the logo. Public
+  // /invoice/checkout/:token pages on Vercel are not on a pay.* host, so they
+  // still use the absolute API URL.
   return window.location.hostname.startsWith("pay.");
 }
 

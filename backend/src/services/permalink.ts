@@ -5,7 +5,10 @@ import { env } from "../config/env";
  *
  * Each brand owns a primary domain (`crystalwebsites.com.au`) and a payment
  * subdomain (`pay`). Invoices for that brand get a permanent link at:
- *   https://pay.crystalwebsites.com.au/invoice/<publicToken>
+ *   https://pay.crystalwebsites.com.au/invoice/checkout/<publicToken>
+ *
+ * The link opens secure checkout directly (the invoice is shown beside the
+ * card form). Older `/invoice/<token>` links still redirect there.
  *
  * The token in the path carries branding/identity, so one hosted app can
  * serve every brand's pay domain. DNS + TLS for those hostnames are provisioned
@@ -71,7 +74,7 @@ export function invoicePermalink(
   invoice: { id: string; publicToken?: string | null },
   brand?: BrandDomain | null,
 ): string {
-  return `${paymentBaseUrl(brand)}/invoice/${invoice.publicToken || invoice.id}`;
+  return `${paymentBaseUrl(brand)}/invoice/checkout/${invoice.publicToken || invoice.id}`;
 }
 
 /** Attach the computed permalink and payment domain to an invoice API response. */
