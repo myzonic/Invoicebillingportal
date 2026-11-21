@@ -14,6 +14,9 @@ export const DEFAULT_BUILDER_DATA: BuilderData = {
   customerTaxId: "",
   billingAddress: "",
   shippingAddress: "",
+  businessName: "",
+  clientName: "",
+  customerEmail: "",
 };
 
 export function normalizeBuilderData(value: unknown): BuilderData {
@@ -42,6 +45,9 @@ export function normalizeBuilderData(value: unknown): BuilderData {
     customerTaxId: str("customerTaxId"),
     billingAddress: str("billingAddress"),
     shippingAddress: str("shippingAddress"),
+    businessName: str("businessName"),
+    clientName: str("clientName"),
+    customerEmail: str("customerEmail"),
   };
 }
 

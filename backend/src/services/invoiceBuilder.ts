@@ -12,6 +12,10 @@ export interface BuilderData {
   customerTaxId: string;
   billingAddress: string;
   shippingAddress: string;
+  /** Optional display overrides edited directly on the invoice document. */
+  businessName: string;
+  clientName: string;
+  customerEmail: string;
 }
 
 export const DEFAULT_BUILDER_DATA: BuilderData = {
@@ -28,6 +32,9 @@ export const DEFAULT_BUILDER_DATA: BuilderData = {
   customerTaxId: "",
   billingAddress: "",
   shippingAddress: "",
+  businessName: "",
+  clientName: "",
+  customerEmail: "",
 };
 
 /** Unknown keys are ignored; malformed values fall back to safe defaults. */
@@ -55,5 +62,8 @@ export function normalizeBuilderData(value: unknown): BuilderData {
     customerTaxId: String(raw.customerTaxId || "").slice(0, 100),
     billingAddress: String(raw.billingAddress || "").slice(0, 2000),
     shippingAddress: String(raw.shippingAddress || "").slice(0, 2000),
+    businessName: String(raw.businessName || "").slice(0, 300),
+    clientName: String(raw.clientName || "").slice(0, 300),
+    customerEmail: String(raw.customerEmail || "").slice(0, 300),
   };
 }

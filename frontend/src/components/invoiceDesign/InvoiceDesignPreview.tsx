@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import type { InvoiceDesign, InvoiceLayout } from "@/types";
 import { mixHex } from "@/lib/invoiceDesign";
-import { money, richText, statusLabel } from "@/lib/utils";
+import { cn, money, richText, sanitizeHtml, statusLabel } from "@/lib/utils";
 import Logo from "@/components/Logo";
 
 export interface PreviewItem {
@@ -8,6 +9,125 @@ export interface PreviewItem {
   quantity: number;
   unitPrice: number;
   discount?: number;
+}
+
+/** Fields that can be edited by clicking directly on the invoice preview. */
+export type EditablePreviewField =
+  | "businessName"
+  | "clientName"
+  | "customerEmail"
+  | "customerAddress"
+  | "invoiceNumber"
+  | "issueDate"
+  | "dueDate"
+  | "notes"
+  | "paymentInstructions"
+  | "terms";
+
+export interface InvoicePreviewEditor {
+  onField: (field: EditablePreviewField, value: string) => void;
+  onItem: (index: number, field: "description" | "quantity" | "unitPrice" | "discount", value: string) => void;
+  onAddItem: () => void;
+  onRemoveItem: (index: number) => void;
+}
+
+/** A single click-to-edit text node inside the invoice document. */
+export function EditableText({
+  value,
+  onCommit,
+  multiline,
+  type = "text",
+  className,
+  style,
+  placeholder = "Click to edit",
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  multiline?: boolean;
+  type?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+
+  const commit = () => {
+    setEditing(false);
+    if (draft !== value) onCommit(draft);
+  };
+
+  if (editing) {
+    const shared = {
+      autoFocus: true,
+      value: draft,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+      onBlur: commit,
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === "Escape") { setDraft(value); setEditing(false); }
+        if (e.key === "Enter" && !multiline) { e.preventDefault(); commit(); }
+      },
+      className: "w-full rounded border border-primary bg-white px-1.5 py-0.5 text-inherit outline-none ring-2 ring-primary/20",
+      style: { ...style, color: "#111827" },
+    };
+    return multiline ? <textarea {...shared} rows={3} /> : <input {...shared} type={type} />;
+  }
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title="Click to edit"
+      onClick={() => setEditing(true)}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditing(true); } }}
+      className={cn("cursor-text rounded-sm px-0.5 -mx-0.5 transition-colors hover:bg-primary/10 hover:ring-1 hover:ring-primary/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", className)}
+      style={style}
+    >
+      {value || <span className="opacity-60">{placeholder}</span>}
+    </span>
+  );
+}
+
+/** Rich-text item description edited in place, preserving formatting. */
+export function EditableRichText({
+  html,
+  onCommit,
+  className,
+  style,
+}: {
+  html: string;
+  onCommit: (value: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (ref.current && !editing) ref.current.innerHTML = html; }, [html, editing]);
+
+  return (
+    <div
+      ref={ref}
+      contentEditable={editing}
+      suppressContentEditableWarning
+      role="button"
+      tabIndex={0}
+      title="Click to edit description"
+      onClick={() => { setEditing(true); ref.current?.focus(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && editing) { e.preventDefault(); ref.current?.blur(); } }}
+      onBlur={() => {
+        setEditing(false);
+        const next = sanitizeHtml(ref.current?.innerHTML || "");
+        if (next !== html) onCommit(next);
+      }}
+      className={cn(
+        "rounded-sm px-0.5 -mx-0.5 transition-colors focus:outline-none",
+        editing ? "bg-white ring-2 ring-primary/40" : "cursor-text hover:bg-primary/10 hover:ring-1 hover:ring-primary/30",
+        className,
+      )}
+      style={style}
+    />
+  );
 }
 
 interface PreviewProps {
@@ -35,6 +155,8 @@ interface PreviewProps {
   customerAddress?: string;
   paymentInstructions?: string;
   terms?: string;
+  /** When provided, the document itself becomes click-to-edit. */
+  editor?: InvoicePreviewEditor;
 }
 
 const DEFAULT_ITEMS: PreviewItem[] = [
@@ -93,8 +215,16 @@ export function InvoiceDesignPreview({
   customerAddress,
   paymentInstructions,
   terms,
+  editor,
   className = "",
 }: PreviewProps) {
+  const onField = (field: EditablePreviewField, value: string) => editor?.onField(field, value);
+  const edit = (value: string, field: EditablePreviewField, style?: React.CSSProperties, multiline?: boolean, type?: string) =>
+    editor ? (
+      <EditableText value={value} onCommit={(v) => onField(field, v)} style={style} multiline={multiline} type={type} />
+    ) : (
+      <span style={style}>{value}</span>
+    );
   const t = tones(design);
   const layout = design.layout;
   const calcSubtotal = subtotal ?? items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
@@ -122,22 +252,22 @@ export function InvoiceDesignPreview({
       <div className="relative">
         {layout === "corporate" || layout === "premium" ? (
           <div className="px-5 py-4" style={{ background: t.primary, borderTop: `3px solid ${t.accent}`, borderBottom: `3px solid ${mixHex(t.secondary, t.primary, 0.35)}` }}>
-            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} dark />
+            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} dark />
           </div>
         ) : layout === "creative" ? (
           <div className="relative px-5 py-4" style={{ borderTop: `4px solid ${t.accent}` }}>
             <div className="absolute inset-y-0 left-0" style={{ width: "44%", background: mixHex(t.accent, t.supporting, 0.35) }} />
             <div className="relative">
-              <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} block />
+              <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} block />
             </div>
           </div>
         ) : layout === "minimal" ? (
           <div className="px-5 pt-5 pb-3">
-            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} rule />
+            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} rule />
           </div>
         ) : (
           <div className="px-5 pt-5 pb-3" style={{ borderTop: `4px solid ${t.primary}`, borderBottom: `1px solid ${t.line}` }}>
-            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} />
+            <HeaderContent t={t} businessName={businessName} invoiceNumber={invoiceNumber} logoUrl={logoUrl} contactLine={contactLine} editor={editor} />
           </div>
         )}
       </div>
@@ -147,11 +277,14 @@ export function InvoiceDesignPreview({
         <div>
           <div style={labelStyle}>Bill to</div>
           <div className="mt-1 font-semibold" style={{ fontSize: 13, color: t.ink }}>
-            {clientName}
+            {edit(clientName, "clientName")}
           </div>
-          <div className="mt-0.5 whitespace-pre-line" style={{ color: t.muted, fontSize: 10 }}>
-              {[customerEmail || "accounts@northwindlabs.co", customerAddress || "48 Harbour Road, Sydney NSW"].filter(Boolean).join("\n")}
-            </div>
+          <div className="mt-0.5" style={{ color: t.muted, fontSize: 10 }}>
+            {edit(customerEmail || "customer@example.com", "customerEmail")}
+          </div>
+          <div className="whitespace-pre-line" style={{ color: t.muted, fontSize: 10 }}>
+            {edit(customerAddress || "Address", "customerAddress", undefined, true)}
+          </div>
         </div>
         <div>
           <div className="text-right" style={labelStyle}>
@@ -168,7 +301,15 @@ export function InvoiceDesignPreview({
                 <dt className="uppercase" style={{ letterSpacing: "0.08em", fontSize: 8, fontWeight: 700, color: t.muted, paddingTop: 1 }}>
                   {k}
                 </dt>
-                <dd style={{ color: t.ink, fontWeight: 600 }}>{v}</dd>
+                <dd style={{ color: t.ink, fontWeight: 600 }}>
+                  {editor && k === "Issue date" ? (
+                    <EditableText value={issueDate} onCommit={(v) => onField("issueDate", v)} style={{ color: "inherit" }} />
+                  ) : editor && k === "Due date" ? (
+                    <EditableText value={dueDate} onCommit={(v) => onField("dueDate", v)} style={{ color: "inherit" }} />
+                  ) : (
+                    v
+                  )}
+                </dd>
               </div>
             ))}
           </dl>
@@ -205,25 +346,60 @@ export function InvoiceDesignPreview({
         {items.map((item, i) => (
           <div
             key={i}
-            className="grid gap-2 px-3 py-2"
+            className="group grid gap-2 px-3 py-2"
             style={{
               gridTemplateColumns: "1fr 44px 78px 78px",
               borderBottom: `1px solid ${t.line}`,
               background: !t.minimal && i % 2 === 1 ? t.softFill : "transparent",
             }}
           >
-            <div className="richtext" style={{ fontSize: 10, color: t.ink }} dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
-            <div className="text-right" style={{ fontSize: 10, color: t.ink }}>
-              {item.quantity}
+            <div className="richtext" style={{ fontSize: 10, color: t.ink }}>
+              {editor ? (
+                <EditableRichText html={item.description} onCommit={(v) => editor.onItem(i, "description", v)} />
+              ) : (
+                <span dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
+              )}
+              {editor && (
+                <span className="mt-0.5 block text-[8px]" style={{ color: t.muted }}>
+                  Disc: <EditableText value={String(item.discount || 0)} onCommit={(v) => editor.onItem(i, "discount", v)} type="number" />
+                </span>
+              )}
             </div>
             <div className="text-right" style={{ fontSize: 10, color: t.ink }}>
-              {money(item.unitPrice, currency)}
+              {editor ? <EditableText value={String(item.quantity)} onCommit={(v) => editor.onItem(i, "quantity", v)} type="number" /> : item.quantity}
+            </div>
+            <div className="text-right" style={{ fontSize: 10, color: t.ink }}>
+              {editor ? (
+                <EditableText value={String(item.unitPrice)} onCommit={(v) => editor.onItem(i, "unitPrice", v)} type="number" />
+              ) : (
+                money(item.unitPrice, currency)
+              )}
             </div>
             <div className="text-right" style={{ fontSize: 10, fontWeight: 600, color: t.ink }}>
-              {money(item.quantity * item.unitPrice - Number(item.discount || 0), currency)}
+              <span title="Calculated automatically">{money(item.quantity * item.unitPrice - Number(item.discount || 0), currency)}</span>
+              {editor && (
+                <button
+                  type="button"
+                  onClick={() => editor.onRemoveItem(i)}
+                  title="Remove item"
+                  className="ml-1 rounded px-1 text-[9px] text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
         ))}
+        {editor && (
+          <button
+            type="button"
+            onClick={editor.onAddItem}
+            className="flex w-full items-center justify-center gap-1 border-b border-dashed py-1.5 text-[9px] font-semibold transition-colors hover:bg-primary/5"
+            style={{ borderColor: t.line, color: t.secondary }}
+          >
+            + Add item
+          </button>
+        )}
       </div>
 
       {/* ---------------- Totals + notes ---------------- */}
@@ -231,17 +407,17 @@ export function InvoiceDesignPreview({
         <div>
           <div style={labelStyle}>Notes</div>
           <p className="mt-1 max-w-[240px]" style={{ fontSize: 9.5, color: t.muted, lineHeight: 1.5 }}>
-            {notes}
+            {edit(notes, "notes", undefined, true)}
           </p>
           {paymentInstructions && (
             <p className="mt-1 max-w-[240px] whitespace-pre-line" style={{ fontSize: 9, color: t.muted }}>
               <span style={{ fontWeight: 700, color: t.secondary }}>Payment instructions: </span>
-              {paymentInstructions}
+              {edit(paymentInstructions, "paymentInstructions", undefined, true)}
             </p>
           )}
           {terms && (
             <p className="mt-1 max-w-[240px] whitespace-pre-line" style={{ fontSize: 8.5, color: t.muted }}>
-              {terms}
+              {edit(terms, "terms", undefined, true)}
             </p>
           )}
         </div>
@@ -290,7 +466,7 @@ export function InvoiceDesignPreview({
             <div style={{ fontSize: 8.5, color: t.onDarkMuted }}>{contactLine}</div>
           </div>
           <div className="font-bold uppercase" style={{ fontSize: 8.5, letterSpacing: "0.14em", color: t.darkAccent }}>
-            {businessName}
+            {edit(businessName, "businessName")}
           </div>
         </div>
       ) : (
@@ -300,7 +476,7 @@ export function InvoiceDesignPreview({
             <div style={{ fontSize: 8.5, color: t.muted }}>{contactLine}</div>
           </div>
           <div className="font-bold uppercase" style={{ fontSize: 8.5, letterSpacing: "0.14em", color: t.secondary }}>
-            {businessName}
+            {edit(businessName, "businessName")}
           </div>
         </div>
       )}
@@ -315,6 +491,7 @@ function HeaderContent({
   invoiceNumber,
   logoUrl,
   contactLine,
+  editor,
   dark,
   block,
   rule,
@@ -324,6 +501,7 @@ function HeaderContent({
   invoiceNumber: string;
   logoUrl?: string | null;
   contactLine: string;
+  editor?: InvoicePreviewEditor;
   dark?: boolean;
   block?: boolean;
   rule?: boolean;
@@ -347,7 +525,9 @@ function HeaderContent({
         </div>
         <div className="min-w-0">
           <div className="truncate font-bold" style={{ fontSize: 13, color: onDark ? "#ffffff" : t.primary }}>
-            {businessName}
+            {editor ? (
+              <EditableText value={businessName} onCommit={(v) => editor.onField("businessName", v)} style={{ color: "inherit" }} />
+            ) : businessName}
           </div>
           <div className="truncate" style={{ fontSize: 9, color: onDark ? t.onDarkMuted : t.muted }}>
             {contactLine}
@@ -360,7 +540,9 @@ function HeaderContent({
           Invoice
         </div>
         <div className="mt-1 font-semibold" style={{ fontSize: 10, color: onDark ? t.onDarkMuted : t.muted }}>
-          # {invoiceNumber}
+          # {editor ? (
+            <EditableText value={invoiceNumber} onCommit={(v) => editor.onField("invoiceNumber", v)} style={{ color: "inherit" }} />
+          ) : invoiceNumber}
         </div>
       </div>
     </div>

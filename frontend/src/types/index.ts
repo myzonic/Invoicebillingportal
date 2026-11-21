@@ -125,6 +125,10 @@ export interface BuilderData {
   customerTaxId: string;
   billingAddress: string;
   shippingAddress: string;
+  /** Optional display overrides edited directly on the invoice document. */
+  businessName: string;
+  clientName: string;
+  customerEmail: string;
 }
 
 export interface InvoiceItem {

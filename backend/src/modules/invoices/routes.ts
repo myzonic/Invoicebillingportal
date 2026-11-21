@@ -38,6 +38,7 @@ const itemSchema = z.object({
 
 const invoiceSchema = z.object({
   clientId: z.string().min(1),
+  number: z.string().trim().min(1).max(64).optional(),
   brandId: z.string().optional(),
   items: z.array(itemSchema).min(1),
   taxRate: z.number().min(0).max(100).default(0),
@@ -649,6 +650,16 @@ router.put(
     const body = invoiceSchema.parse(req.body);
     const client = await prisma.client.findUnique({ where: { id: body.clientId } });
     if (!client) throw new ApiError(404, "Client not found");
+
+    // Inline preview editing may change the visible number. Keep it unique and
+    // never touch publicToken/permalink — those stay permanently stable.
+    let nextNumber = existing.number;
+    if (body.number && body.number !== existing.number) {
+      const clash = await prisma.invoice.findFirst({ where: { number: body.number, id: { not: existing.id } } });
+      if (clash) throw new ApiError(400, "That invoice number is already in use");
+      nextNumber = body.number;
+    }
+
     const brand = await resolveBrand(body.brandId, client.brandId, existing.brandId);
     const currency = body.currency || existing.currency || brand.currency || "USD";
 
@@ -684,6 +695,7 @@ router.put(
     const invoice = await prisma.invoice.update({
       where: { id: req.params.id },
       data: {
+        number: nextNumber,
         clientId: body.clientId,
         brandId: brand.id,
         items: body.items,

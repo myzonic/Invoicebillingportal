@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { useCreatePaymentQuoteMutation, usePublicInvoiceQuery } from "@/app/apiSlice";
 import type { PaymentQuote } from "@/types";
 import { brandColor, formatDate, money, rgba, richText, shade, statusLabel } from "@/lib/utils";
+import { resolveInvoiceDesign, mixHex, tint } from "@/lib/invoiceDesign";
+import { tones } from "@/components/invoiceDesign/InvoiceDesignPreview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner, EmptyState } from "@/components/ui/table";
@@ -116,7 +118,22 @@ export default function SquareCheckout() {
   const brand = inv.brand;
   const company = inv.company || { name: brand?.name || branding.companyName, email: "", phone: "", address: "", website: "" };
   const brandName = brand?.businessName || brand?.name || company.name;
-  const accent = brandColor(brand?.color || inv.color);
+  // Use the invoice's saved design (or the brand default) so this page matches
+  // the PDF and the public invoice page. Fall back to the legacy single colour.
+  const design = resolveInvoiceDesign(inv, brand);
+  const t = design && design.layout !== "legacy" ? tones(design) : null;
+  const accent = t ? t.accent : brandColor(brand?.color || inv.color);
+  const primary = t ? t.primary : "#171719";
+  const secondary = t ? t.secondary : accent;
+  const ink = t ? t.ink : "#171c26";
+  const muted = t ? t.muted : "#6b7280";
+  const line = t ? t.line : "#e5e7eb";
+  const softFill = t ? t.softFill : "#f9fafb";
+  const headerDark = t ? t.headerDark : true;
+  const headerText = headerDark ? "#ffffff" : ink;
+  const headerMuted = headerDark ? t?.onDarkMuted || "rgba(255,255,255,.75)" : muted;
+  const headerTitle = headerDark ? t?.darkAccent || shade(accent, 0.4) : secondary;
+  const tableHeaderFill = t ? (t.minimal ? "transparent" : mixHex(t.supporting, t.primary, 0.08)) : "#f9fafb";
   const accentDark = shade(accent, -0.4);
   const accentSoft = shade(accent, 0.85);
   const inputBorder = { borderColor: rgba(accent, 0.5) };
@@ -195,7 +212,9 @@ export default function SquareCheckout() {
   return (
     <div
       className="relative min-h-screen overflow-hidden p-4 lg:p-8"
-      style={{ background: `linear-gradient(135deg, ${shade(accent, 0.97)} 0%, ${shade(accent, 0.9)} 50%, ${shade(accent, 0.82)} 100%)` }}
+      style={{
+        background: `linear-gradient(135deg, ${tint(t?.supporting || accent, 0.96)} 0%, ${tint(t?.supporting || accent, 0.88)} 55%, ${tint(t?.accent || accent, 0.9)} 100%)`,
+      }}
     >
       <div
         className="pointer-events-none absolute inset-0"
@@ -215,75 +234,81 @@ export default function SquareCheckout() {
         {/* Left: PDF-style invoice */}
         <Card
           className="overflow-hidden border bg-white text-neutral-900"
-          style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(accent, 0.4)}` }}
+          style={{ borderColor: line, boxShadow: `0 24px 60px -24px ${rgba(primary, 0.35)}` }}
         >
-          <div className="flex flex-wrap items-start justify-between gap-4 bg-[#171719] px-6 py-5 sm:px-10">
-            <div>
+          <div
+            className="flex flex-wrap items-start justify-between gap-4 px-6 py-5 sm:px-10"
+            style={{
+              background: headerDark ? primary : "transparent",
+              borderTop: headerDark ? `3px solid ${accent}` : `4px solid ${primary}`,
+              borderBottom: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
+            }}
+          >
+            <div className="flex min-w-0 items-start gap-3">
               <div
-                className="text-2xl font-bold tracking-tight"
+                className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg"
                 style={{
-                  backgroundImage: `linear-gradient(180deg, ${shade(accent, 0.55)}, ${shade(accent, 0.05)})`,
-                  WebkitBackgroundClip: "text",
-                  backgroundClip: "text",
-                  color: "transparent",
+                  background: headerDark ? "#ffffff" : softFill,
+                  border: `1px solid ${headerDark ? secondary : line}`,
+                  padding: 5,
                 }}
               >
-                {brandName}
+                <Logo src={brand?.logoUrl} alt={brandName} className="max-h-full max-w-full" />
               </div>
-              <div className="mt-1 text-xs text-white/75">{brand?.address || company.address}</div>
-              <div className="text-xs text-white/75">
-                {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
-              </div>
-              {headerLines.length > 0 && (
-                <div className="mt-1 whitespace-pre-line text-xs" style={{ color: shade(accent, 0.4) }}>
-                  {headerLines.join("\n")}
+              <div className="min-w-0">
+                <div className="truncate text-xl font-bold tracking-tight" style={{ color: headerText }}>
+                  {brandName}
                 </div>
-              )}
+                <div className="mt-1 text-xs" style={{ color: headerMuted }}>{brand?.address || company.address}</div>
+                <div className="text-xs" style={{ color: headerMuted }}>
+                  {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
+                </div>
+                {headerLines.length > 0 && (
+                  <div className="mt-1 whitespace-pre-line text-xs" style={{ color: headerTitle }}>
+                    {headerLines.join("\n")}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="text-right">
-              <div
-                className="text-3xl font-bold uppercase tracking-tight"
-                style={{
-                  backgroundImage: `linear-gradient(180deg, ${shade(accent, 0.55)}, ${shade(accent, 0.05)})`,
-                  WebkitBackgroundClip: "text",
-                  backgroundClip: "text",
-                  color: "transparent",
-                }}
-              >
+              <div className="text-3xl font-bold uppercase tracking-tight" style={{ color: headerTitle }}>
                 Invoice
               </div>
-              <div className="mt-1 text-sm font-medium text-white/75"># {inv.number}</div>
+              <div className="mt-1 text-sm font-medium" style={{ color: headerMuted }}># {inv.number}</div>
             </div>
           </div>
 
           <div className="p-6 sm:p-10">
             <div className="grid grid-cols-2 gap-6 text-sm">
               <div>
-                <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-neutral-400">Bill to</div>
-                <div className="font-semibold text-neutral-900">{inv.client?.name}</div>
-                {inv.client?.email && <div className="mt-0.5 text-neutral-500">{inv.client.email}</div>}
-                {inv.client?.phone && <div className="text-neutral-500">{inv.client.phone}</div>}
-                {inv.client?.address && <div className="mt-0.5 whitespace-pre-line text-neutral-500">{inv.client.address}</div>}
+                <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: secondary }}>Bill to</div>
+                <div className="font-semibold" style={{ color: ink }}>{inv.client?.name}</div>
+                {inv.client?.email && <div className="mt-0.5" style={{ color: muted }}>{inv.client.email}</div>}
+                {inv.client?.phone && <div style={{ color: muted }}>{inv.client.phone}</div>}
+                {inv.client?.address && <div className="mt-0.5 whitespace-pre-line" style={{ color: muted }}>{inv.client.address}</div>}
               </div>
               <div className="space-y-1.5 text-right">
                 <div className="flex justify-end gap-2">
-                  <span className="text-neutral-400">Issue date:</span>
-                  <span className="font-medium text-neutral-900">{formatDate(inv.issueDate)}</span>
+                  <span style={{ color: muted }}>Issue date:</span>
+                  <span className="font-medium" style={{ color: ink }}>{formatDate(inv.issueDate)}</span>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <span className="text-neutral-400">Due date:</span>
-                  <span className="font-medium text-neutral-900">{formatDate(inv.dueDate)}</span>
+                  <span style={{ color: muted }}>Due date:</span>
+                  <span className="font-medium" style={{ color: ink }}>{formatDate(inv.dueDate)}</span>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <span className="text-neutral-400">Status:</span>
-                  <span className="font-medium text-neutral-900">{statusLabel(inv.status)}</span>
+                  <span style={{ color: muted }}>Status:</span>
+                  <span className="font-medium" style={{ color: secondary }}>{statusLabel(inv.status)}</span>
                 </div>
               </div>
             </div>
 
             <table className="mt-8 w-full text-sm">
               <thead>
-                <tr className="border-y border-neutral-200 bg-neutral-50 text-[11px] uppercase tracking-wide text-neutral-500">
+                <tr
+                  className="border-y text-[11px] uppercase tracking-wide"
+                  style={{ borderColor: line, background: tableHeaderFill, color: secondary }}
+                >
                   <th className="py-2.5 text-left font-bold">Description</th>
                   <th className="py-2.5 text-right font-bold">Qty</th>
                   <th className="py-2.5 text-right font-bold">Unit Price</th>
@@ -292,13 +317,13 @@ export default function SquareCheckout() {
               </thead>
               <tbody>
                 {items.map((item, i) => (
-                  <tr key={i} className="border-b border-neutral-200">
-                    <td className="py-2.5 text-neutral-700">
+                  <tr key={i} className="border-b" style={{ borderColor: line, background: t && !t.minimal && i % 2 === 1 ? t.softFill : "transparent" }}>
+                    <td className="py-2.5" style={{ color: ink }}>
                       <span className="richtext" dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
                     </td>
-                    <td className="py-2.5 text-right text-neutral-700">{item.quantity}</td>
-                    <td className="py-2.5 text-right text-neutral-700">{money(item.unitPrice, inv.currency)}</td>
-                    <td className="py-2.5 text-right font-medium text-neutral-900">{money(item.quantity * item.unitPrice, inv.currency)}</td>
+                    <td className="py-2.5 text-right" style={{ color: ink }}>{item.quantity}</td>
+                    <td className="py-2.5 text-right" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
+                    <td className="py-2.5 text-right font-medium" style={{ color: ink }}>{money(item.quantity * item.unitPrice, inv.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -306,32 +331,50 @@ export default function SquareCheckout() {
 
             <div className="mt-6 flex flex-col items-end gap-1.5 text-sm">
               <div className="flex w-64 justify-between">
-                <span className="text-neutral-500">Subtotal</span>
-                <span className="text-neutral-700">{money(inv.subtotal, inv.currency)}</span>
+                <span style={{ color: muted }}>Subtotal</span>
+                <span style={{ color: ink }}>{money(inv.subtotal, inv.currency)}</span>
               </div>
               <div className="flex w-64 justify-between">
-                <span className="text-neutral-500">Tax ({inv.taxRate}%)</span>
-                <span className="text-neutral-700">{money(inv.taxAmount, inv.currency)}</span>
+                <span style={{ color: muted }}>Tax ({inv.taxRate}%)</span>
+                <span style={{ color: ink }}>{money(inv.taxAmount, inv.currency)}</span>
               </div>
               {Number(inv.discountAmount) > 0 && (
                 <div className="flex w-64 justify-between">
-                  <span className="text-neutral-500">Discount</span>
-                  <span className="text-neutral-700">-{money(inv.discountAmount, inv.currency)}</span>
+                  <span style={{ color: muted }}>Discount</span>
+                  <span style={{ color: ink }}>-{money(inv.discountAmount, inv.currency)}</span>
                 </div>
               )}
-              <div className="flex w-64 justify-between border-t border-neutral-300 pt-2 text-base font-bold text-neutral-900">
+              {Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping || 0) > 0 && (
+                <div className="flex w-64 justify-between">
+                  <span style={{ color: muted }}>Shipping</span>
+                  <span style={{ color: ink }}>{money(Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping), inv.currency)}</span>
+                </div>
+              )}
+              <div
+                className="flex w-64 items-center justify-between px-3 py-2 text-base font-bold"
+                style={{
+                  background: t ? (t.headerDark ? primary : mixHex(accent, "#ffffff", 0.86)) : "#f9fafb",
+                  color: t && t.headerDark ? "#ffffff" : (t ? primary : ink),
+                }}
+              >
                 <span>TOTAL</span>
                 <span>{money(inv.total, inv.currency)}</span>
               </div>
             </div>
 
-            {inv.notes && <p className="mt-6 text-sm text-neutral-500">Notes: {inv.notes}</p>}
+            {inv.notes && <p className="mt-6 text-sm" style={{ color: muted }}>Notes: {inv.notes}</p>}
           </div>
 
-          <div className="bg-[#171719] px-6 py-4 sm:px-10">
-            <p className="whitespace-pre-line text-sm text-white/75">{footerText}</p>
+          <div
+            className="px-6 py-4 sm:px-10"
+            style={{
+              background: headerDark ? primary : "#ffffff",
+              borderTop: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
+            }}
+          >
+            <p className="whitespace-pre-line text-sm" style={{ color: headerMuted }}>{footerText}</p>
             {footerContact && (
-              <p className="mt-1 text-xs" style={{ color: shade(accent, 0.35) }}>
+              <p className="mt-1 text-xs" style={{ color: headerTitle }}>
                 {footerContact}
               </p>
             )}
@@ -349,9 +392,9 @@ export default function SquareCheckout() {
                 <div
                   className="flex size-16 items-center justify-center overflow-hidden rounded-xl"
                   style={{
-                    background: `linear-gradient(180deg, ${shade(accent, 0.5)}, ${accent})`,
+                    background: `#ffffff`,
                     boxShadow: `inset 0 1px 0 ${rgba("#ffffff", 0.8)}`,
-                    border: `1px solid ${shade(accent, -0.15)}`,
+                    border: `1px solid ${secondary}`,
                   }}
                 >
                   <Logo src={brand?.logoUrl} alt={brand?.name} className="size-12" />

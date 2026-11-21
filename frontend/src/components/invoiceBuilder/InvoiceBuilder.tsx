@@ -56,7 +56,7 @@ import { Spinner } from "@/components/ui/table";
 import { RichTextEditor } from "@/components/ui/richText";
 import { PdfFrame } from "@/components/PdfFrame";
 import { InvoiceDesignEditor } from "@/components/invoiceDesign/InvoiceDesignEditor";
-import { InvoiceDesignPreview } from "@/components/invoiceDesign/InvoiceDesignPreview";
+import { InvoiceDesignPreview, type EditablePreviewField, type InvoicePreviewEditor } from "@/components/invoiceDesign/InvoiceDesignPreview";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
@@ -158,6 +158,7 @@ export default function InvoiceBuilder() {
   const [form, setForm] = useState({
     clientId: params.get("client") || "",
     brandId: "",
+    number: "",
     currency: "USD",
     color: "",
     taxRate: 0,
@@ -193,6 +194,7 @@ export default function InvoiceBuilder() {
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const lastSavedRef = useRef("");
   const attachmentRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef("");
   const pdfFrameRef = useRef<HTMLDivElement>(null);
@@ -207,6 +209,7 @@ export default function InvoiceBuilder() {
     setForm({
       clientId: inv.clientId,
       brandId: inv.brandId || "",
+      number: inv.number,
       currency: inv.currency,
       color: inv.color || "",
       taxRate: Number(inv.taxRate),
@@ -336,6 +339,7 @@ export default function InvoiceBuilder() {
   const payload = () => ({
     clientId: form.clientId,
     brandId: form.brandId || undefined,
+    ...(savedInvoice && form.number ? { number: form.number } : {}),
     items: items.map(({ id: _id, ...rest }) => rest),
     taxRate: Number(form.taxRate),
     discountAmount: Number(form.discountAmount),
@@ -347,6 +351,27 @@ export default function InvoiceBuilder() {
     builderData: builder,
     ...(designTouched ? { designOverride } : {}),
   });
+
+  // Inline preview edits auto-save to the saved invoice (silent, debounced).
+  // New invoices are saved explicitly via "Save Invoice" first.
+  const payloadSnapshot = JSON.stringify(payload());
+  useEffect(() => {
+    if (!savedInvoice) return;
+    if (!lastSavedRef.current) { lastSavedRef.current = payloadSnapshot; return; }
+    if (payloadSnapshot === lastSavedRef.current) return;
+    const timer = setTimeout(() => {
+      if (submittingRef.current || !savedInvoice) return;
+      updateInvoice({ id: savedInvoice.id, body: JSON.parse(payloadSnapshot) })
+        .unwrap()
+        .then((res) => {
+          lastSavedRef.current = payloadSnapshot;
+          setSavedInvoice(res.data);
+          setDirty(false);
+        })
+        .catch(() => { /* keep local edits; user can retry with Save Invoice */ });
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [payloadSnapshot, savedInvoice, updateInvoice]);
 
   const validate = () => {
     if (!form.clientId) { toast.error("Select a customer"); goToStep(1); return false; }
@@ -370,6 +395,7 @@ export default function InvoiceBuilder() {
         : (await createInvoice(payload()).unwrap()).data;
       setSavedInvoice(result);
       setDirty(false);
+      lastSavedRef.current = JSON.stringify(payload());
       setShowSavedDialog(true);
       window.history.replaceState({}, "", `/dashboard/invoices/update/${result.id}`);
       if (sendAfter) {
@@ -451,14 +477,40 @@ export default function InvoiceBuilder() {
 
   if (loadingInvoice) return <Spinner />;
 
+  const onPreviewField = (field: EditablePreviewField, value: string) => {
+    switch (field) {
+      case "businessName": return setBuilderField("businessName", value);
+      case "clientName": return setBuilderField("clientName", value);
+      case "customerEmail": return setBuilderField("customerEmail", value);
+      case "customerAddress": return setBuilderField("billingAddress", value);
+      case "invoiceNumber": return set("number", value);
+      case "issueDate": return set("issueDate", value);
+      case "dueDate": return set("dueDate", value);
+      case "notes": return set("notes", value);
+      case "paymentInstructions": return setBuilderField("paymentInstructions", value);
+      case "terms": return setBuilderField("terms", value);
+    }
+  };
+  const previewEditor: InvoicePreviewEditor = {
+    onField: onPreviewField,
+    onItem: (index, field, value) => {
+      if (field === "description") return updateItem(index, { description: value });
+      if (field === "quantity") return updateItem(index, { quantity: Number(value) || 0 });
+      if (field === "unitPrice") return updateItem(index, { unitPrice: Number(value) || 0 });
+      return updateItem(index, { discount: Math.max(0, Number(value) || 0) });
+    },
+    onAddItem: addItem,
+    onRemoveItem: removeItem,
+  };
+
   const previewProps = {
     design: effectiveDesign,
     logoUrl: selectedBrand?.logoUrl,
-    businessName: selectedBrand?.businessName || selectedBrand?.name || "Your Company",
-    clientName: selectedClient?.name || "Customer",
-    customerEmail: selectedClient?.email,
+    businessName: builder.businessName || selectedBrand?.businessName || selectedBrand?.name || "Your Company",
+    clientName: builder.clientName || selectedClient?.name || "Customer",
+    customerEmail: builder.customerEmail || selectedClient?.email,
     customerAddress: builder.billingAddress || selectedClient?.address,
-    invoiceNumber: savedInvoice?.number || "Draft",
+    invoiceNumber: form.number || savedInvoice?.number || "Draft",
     items: items.map((i) => ({
       description: i.description,
       quantity: Number(i.quantity) || 0,
@@ -477,6 +529,7 @@ export default function InvoiceBuilder() {
     shipping: totals.shipping,
     paymentInstructions: builder.paymentInstructions,
     terms: builder.terms,
+    editor: previewEditor,
   };
 
   const previewPanel = (
@@ -526,7 +579,7 @@ export default function InvoiceBuilder() {
               </Field>
               <Field label="Invoice number" hint="Generated automatically — never changed">
                 <div className="flex h-9 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm font-medium">
-                  {savedInvoice?.number || <span className="text-muted-foreground">Generated on save</span>}
+                  {form.number || savedInvoice?.number || <span className="text-muted-foreground">Generated on save</span>}
                 </div>
               </Field>
               <Field label="Issue date" required>
