@@ -396,21 +396,13 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
   page.drawRectangle({ x: 0, y: height - bandH, width, height: bandH, color: col(BLACK) });
   page.drawRectangle({ x: 0, y: height - bandH, width, height: 3, color: col(accentMid) });
 
-  // Logo on a white chip, natural aspect ratio (2:1 landscape)
-  const logoH = 52;
-  const logoW = Math.round(logoH * logoRatio);
-  const chipX = margin;
-  const chipY = height - bandH + (bandH - logoH) / 2;
-  page.drawRectangle({ x: chipX, y: chipY, width: logoW, height: logoH, color: col(WHITE), borderColor: col(accentMid), borderWidth: 1.2 });
+  // Logo printed directly on the document — no chip, box or background.
+  const logoH = logo ? 52 : 0;
+  const logoW = logo ? Math.round(logoH * logoRatio) : 0;
+  const logoX = margin;
+  const logoY = height - bandH + (bandH - logoH) / 2;
   if (logo) {
-    const imgH = logoH - 10;
-    const imgW = imgH * logoRatio;
-    page.drawImage(logo, {
-      x: chipX + (logoW - imgW) / 2,
-      y: chipY + (logoH - imgH) / 2,
-      width: imgW,
-      height: imgH,
-    });
+    page.drawImage(logo, { x: logoX, y: logoY, width: logoW, height: logoH });
   }
 
   // INVOICE wordmark on the right of the band
@@ -428,7 +420,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
   });
   if (brandEmail) headerLines.push({ t: brandEmail, f: font, s: 9, c: accentLight });
   if (brandPhone) headerLines.push({ t: brandPhone, f: font, s: 9, c: accentLight });
-  const headerLeft = chipX + logoW + 18;
+  const headerLeft = margin + (logo ? logoW + 18 : 0);
   const headerMaxW = Math.max(120, right - 160 - headerLeft);
   let headerY = height - bandH + 64;
   for (const ln of headerLines.slice(0, 5)) {
@@ -672,28 +664,14 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
     page.drawRectangle({ x: margin, y: topY + 8, width: right - margin, height: 1, color: col(line) });
   }
 
+  // Logo sits directly on the header band — no chip, box or background.
   const logoX = margin;
   const logoY = topY + (bandH - logoH) / 2;
-  if (headerDark || design.layout === "creative") {
-    page.drawRectangle({
-      x: logoX,
-      y: logoY,
-      width: logoW,
-      height: logoH,
-      color: col(WHITE),
-      borderColor: col(headerDark ? secondary : accent),
-      borderWidth: 1,
-    });
-  } else {
-    page.drawRectangle({ x: logoX, y: logoY, width: logoW, height: logoH, color: col(softFill), borderColor: col(line), borderWidth: 0.7 });
-  }
   if (logo) {
-    const imgH = logoH - 10;
-    const imgW = imgH * logoRatio;
-    page.drawImage(logo, { x: logoX + (logoW - imgW) / 2, y: logoY + (logoH - imgH) / 2, width: imgW, height: imgH });
+    page.drawImage(logo, { x: logoX, y: logoY, width: logoW, height: logoH });
   }
 
-  const headerLeft = logoX + logoW + 18;
+  const headerLeft = margin + (logo ? logoW + 18 : 0);
   const headerMaxW = Math.max(130, right - 170 - headerLeft);
   const titleColor = headerDark ? WHITE : primary;
   const detailColor = headerDark ? mix(WHITE, primary, 0.72) : muted;
