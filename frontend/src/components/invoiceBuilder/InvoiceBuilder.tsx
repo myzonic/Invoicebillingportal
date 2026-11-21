@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -6,9 +6,6 @@ import {
   ArrowLeft,
   ArrowUp,
   Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Eye,
   FileText,
@@ -53,6 +50,7 @@ import { Select } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/table";
+import AssetImage from "@/components/AssetImage";
 import { RichTextEditor } from "@/components/ui/richText";
 import { PdfFrame } from "@/components/PdfFrame";
 import { InvoiceDesignEditor } from "@/components/invoiceDesign/InvoiceDesignEditor";
@@ -60,69 +58,15 @@ import { InvoiceDesignPreview, type EditablePreviewField, type InvoicePreviewEdi
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
-const STEPS = [
-  { label: "Invoice", hint: "Details & branding" },
-  { label: "Customer", hint: "Who you're billing" },
-  { label: "Items", hint: "Products & services" },
-  { label: "Summary", hint: "Totals & adjustments" },
-  { label: "Payment", hint: "Terms & instructions" },
-  { label: "Additional Details", hint: "Notes & attachments" },
-  { label: "Design", hint: "Template & colours" },
-];
-
-function StepNav({
-  active,
-  completed,
-  onSelect,
-}: {
-  active: number;
-  completed: number[];
-  onSelect: (index: number) => void;
-}) {
+function Group({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5 shadow-sm" aria-label="Invoice steps">
-      {STEPS.map((step, index) => {
-        const isActive = index === active;
-        const isDone = index < active || completed.includes(index);
-        return (
-          <button
-            key={step.label}
-            type="button"
-            onClick={() => onSelect(index)}
-            title={step.hint}
-            className={cn(
-              "flex min-w-[130px] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left transition-all",
-              isActive ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-muted",
-            )}
-          >
-            <span
-              className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
-                isActive ? "bg-primary-foreground/20 text-primary-foreground" : isDone ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
-              )}
-            >
-              {isDone && !isActive ? <Check className="size-3" /> : index + 1}
-            </span>
-            <span className="min-w-0">
-              <span className={cn("block truncate text-xs font-semibold", isActive ? "text-primary-foreground" : "text-foreground")}>{step.label}</span>
-              <span className={cn("hidden truncate text-[10px] xl:block", isActive ? "text-primary-foreground/70" : "text-muted-foreground")}>{step.hint}</span>
-            </span>
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
-
-function Group({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-border p-4">
+    <section className="rounded-xl border border-border p-4">
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -135,6 +79,10 @@ function SummaryRow({ label, value, strong, muted }: { label: string; value: str
   );
 }
 
+/**
+ * Single-page invoice editor. Every section stays on this page; the right
+ * column is the live document and the exact PDF, with no step navigation.
+ */
 export default function InvoiceBuilder() {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -174,29 +122,26 @@ export default function InvoiceBuilder() {
   const [savedInvoice, setSavedInvoice] = useState<Invoice | null>(null);
   const [showSavedDialog, setShowSavedDialog] = useState(false);
 
-  const [activeStep, setActiveStep] = useState(0);
-  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-  const [mobileTab, setMobileTab] = useState<"edit" | "preview">("edit");
-
   const [clientSearch, setClientSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [quickClientOpen, setQuickClientOpen] = useState(false);
   const [quickClient, setQuickClient] = useState({ name: "", email: "", phone: "", address: "" });
-  const [editCustomer, setEditCustomer] = useState(false);
   const [expandedItemNotes, setExpandedItemNotes] = useState<Record<string, boolean>>({});
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
+  const [pdfMode, setPdfMode] = useState<"live" | "pdf">("live");
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [pdfGenerating, setPdfGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [expandOpen, setExpandOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [previewing, setPreviewing] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
   const submittingRef = useRef(false);
   const lastSavedRef = useRef("");
   const attachmentRef = useRef<HTMLInputElement>(null);
-  const previewUrlRef = useRef("");
+  const pdfUrlRef = useRef("");
   const pdfFrameRef = useRef<HTMLDivElement>(null);
 
   /* ------------------------------------------------------------------ */
@@ -241,8 +186,7 @@ export default function InvoiceBuilder() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  useEffect(() => { previewUrlRef.current = previewUrl; }, [previewUrl]);
-  useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current); }, []);
+  useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
 
   /* ------------------------------------------------------------------ */
   /* Derived values                                                      */
@@ -267,6 +211,9 @@ export default function InvoiceBuilder() {
     const q = clientSearch.trim().toLowerCase();
     return !q || c.name.toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q);
   });
+  const businessName = builder.businessName || selectedBrand?.businessName || selectedBrand?.name || "Your Company";
+  const contactLine = [selectedBrand?.email, selectedBrand?.phone, selectedBrand?.website].filter(Boolean).join("  ·  ");
+  const footerText = selectedBrand?.pdfFooter?.trim() || `Thank you for your business. ${businessName}`;
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -292,13 +239,30 @@ export default function InvoiceBuilder() {
     setDirty(true);
   };
 
-  const goToStep = (index: number) => {
-    setActiveStep(Math.max(0, Math.min(STEPS.length - 1, index)));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-  const goNext = () => {
-    setCompletedSteps((prev) => [...new Set([...prev, activeStep])]);
-    goToStep(activeStep + 1);
+  const startNewInvoice = () => {
+    if (dirty && !window.confirm("Discard unsaved changes and start a new invoice?")) return;
+    setSavedInvoice(null);
+    setForm({
+      clientId: params.get("client") || "",
+      brandId: "",
+      number: "",
+      currency: "USD",
+      color: "",
+      taxRate: 0,
+      discountAmount: 0,
+      notes: "",
+      issueDate: new Date().toISOString().slice(0, 10),
+      dueDate: "",
+    });
+    setItems([newItem()]);
+    setBuilder(DEFAULT_BUILDER_DATA);
+    setDesignOverride(null);
+    setDesignTouched(false);
+    setExpandedItemNotes({});
+    setDirty(false);
+    setShowSavedDialog(false);
+    lastSavedRef.current = "";
+    navigate("/dashboard/invoices/add");
   };
 
   /* ------------------------------------------------------------------ */
@@ -352,9 +316,25 @@ export default function InvoiceBuilder() {
     ...(designTouched ? { designOverride } : {}),
   });
 
-  // Inline preview edits auto-save to the saved invoice (silent, debounced).
-  // New invoices are saved explicitly via "Save Invoice" first.
   const payloadSnapshot = JSON.stringify(payload());
+
+  const validationError = () => {
+    if (!form.clientId) return "Select a customer";
+    if (!form.brandId) return "Select a company / brand";
+    if (!items.length) return "Add at least one line item";
+    if (items.some((i) => !stripTags(i.description))) return "Every item needs a description";
+    if (items.some((i) => Number(i.quantity) <= 0)) return "Item quantities must be greater than zero";
+    if (items.some((i) => Number(i.unitPrice) < 0)) return "Unit prices cannot be negative";
+    if (!form.issueDate) return "Choose an issue date";
+    return "";
+  };
+  const validate = () => {
+    const problem = validationError();
+    if (problem) { toast.error(problem); return false; }
+    return true;
+  };
+
+  // Edits to a saved invoice auto-save quietly; new invoices save explicitly.
   useEffect(() => {
     if (!savedInvoice) return;
     if (!lastSavedRef.current) { lastSavedRef.current = payloadSnapshot; return; }
@@ -373,17 +353,6 @@ export default function InvoiceBuilder() {
     return () => clearTimeout(timer);
   }, [payloadSnapshot, savedInvoice, updateInvoice]);
 
-  const validate = () => {
-    if (!form.clientId) { toast.error("Select a customer"); goToStep(1); return false; }
-    if (!form.brandId) { toast.error("Select a company / brand"); goToStep(0); return false; }
-    if (!items.length) { toast.error("Add at least one line item"); goToStep(2); return false; }
-    if (items.some((i) => !stripTags(i.description))) { toast.error("Every item needs a description"); goToStep(2); return false; }
-    if (items.some((i) => Number(i.quantity) <= 0)) { toast.error("Item quantities must be greater than zero"); goToStep(2); return false; }
-    if (items.some((i) => Number(i.unitPrice) < 0)) { toast.error("Unit prices cannot be negative"); goToStep(2); return false; }
-    if (!form.issueDate) { toast.error("Choose an issue date"); goToStep(0); return false; }
-    return true;
-  };
-
   const save = async (sendAfter = false): Promise<Invoice | null> => {
     if (savedInvoice?.status === "PAID") { toast.error("Paid invoices cannot be edited"); return null; }
     if (!validate() || submittingRef.current) return null;
@@ -395,7 +364,7 @@ export default function InvoiceBuilder() {
         : (await createInvoice(payload()).unwrap()).data;
       setSavedInvoice(result);
       setDirty(false);
-      lastSavedRef.current = JSON.stringify(payload());
+      lastSavedRef.current = "";
       setShowSavedDialog(true);
       window.history.replaceState({}, "", `/dashboard/invoices/update/${result.id}`);
       if (sendAfter) {
@@ -414,18 +383,35 @@ export default function InvoiceBuilder() {
     }
   };
 
+  const generatePdfPreview = async (body: unknown) => {
+    const res = await api.post("/invoices/preview-pdf", body, { responseType: "blob" });
+    const next = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+    if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+    pdfUrlRef.current = next;
+    setPdfUrl(next);
+  };
+
+  // The PDF tab is auto-refreshed from the current editor values, so every
+  // page of the document stays accurate without leaving this screen.
+  useEffect(() => {
+    if (pdfMode !== "pdf" || validationError()) return;
+    const timer = setTimeout(() => {
+      void generatePdfPreview(JSON.parse(payloadSnapshot)).catch(() => { /* silent in background */ });
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payloadSnapshot, pdfMode]);
+
   const openPdfPreview = async () => {
     if (!validate()) return;
-    setPreviewing(true);
+    setPdfGenerating(true);
     try {
-      const res = await api.post("/invoices/preview-pdf", payload(), { responseType: "blob" });
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })));
+      await generatePdfPreview(JSON.parse(payloadSnapshot));
       setPreviewOpen(true);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
-      setPreviewing(false);
+      setPdfGenerating(false);
     }
   };
 
@@ -453,8 +439,7 @@ export default function InvoiceBuilder() {
       const fd = new FormData();
       fd.append("file", file);
       const res = await upload(fd).unwrap();
-      setBuilder((b) => ({ ...b, attachments: [...b.attachments, { name: file.name, url: res.data.url }].slice(0, 10) }));
-      setDirty(true);
+      setBuilderField("attachments", [...builder.attachments, { name: file.name, url: res.data.url }].slice(0, 10));
       toast.success("Attachment added");
     } catch (err) {
       toast.error(errorMessage(err));
@@ -477,7 +462,12 @@ export default function InvoiceBuilder() {
 
   if (loadingInvoice) return <Spinner />;
 
+  /* ------------------------------------------------------------------ */
+  /* Direct editing in the live document                                 */
+  /* ------------------------------------------------------------------ */
+
   const onPreviewField = (field: EditablePreviewField, value: string) => {
+    const amount = Math.max(0, Number(value) || 0);
     switch (field) {
       case "businessName": return setBuilderField("businessName", value);
       case "clientName": return setBuilderField("clientName", value);
@@ -489,15 +479,17 @@ export default function InvoiceBuilder() {
       case "notes": return set("notes", value);
       case "paymentInstructions": return setBuilderField("paymentInstructions", value);
       case "terms": return setBuilderField("terms", value);
+      case "taxRate": return set("taxRate", amount);
+      case "discountAmount": return set("discountAmount", amount);
+      case "shipping": return setBuilderField("shipping", amount);
     }
   };
   const previewEditor: InvoicePreviewEditor = {
     onField: onPreviewField,
     onItem: (index, field, value) => {
       if (field === "description") return updateItem(index, { description: value });
-      if (field === "quantity") return updateItem(index, { quantity: Number(value) || 0 });
-      if (field === "unitPrice") return updateItem(index, { unitPrice: Number(value) || 0 });
-      return updateItem(index, { discount: Math.max(0, Number(value) || 0) });
+      const amount = field === "quantity" ? Number(value) || 0 : Math.max(0, Number(value) || 0);
+      return updateItem(index, { [field]: amount });
     },
     onAddItem: addItem,
     onRemoveItem: removeItem,
@@ -506,7 +498,7 @@ export default function InvoiceBuilder() {
   const previewProps = {
     design: effectiveDesign,
     logoUrl: selectedBrand?.logoUrl,
-    businessName: builder.businessName || selectedBrand?.businessName || selectedBrand?.name || "Your Company",
+    businessName,
     clientName: builder.clientName || selectedClient?.name || "Customer",
     customerEmail: builder.customerEmail || selectedClient?.email,
     customerAddress: builder.billingAddress || selectedClient?.address,
@@ -523,489 +515,446 @@ export default function InvoiceBuilder() {
     status: savedInvoice ? statusLabel(savedInvoice.displayStatus || savedInvoice.status) : "Draft",
     notes: form.notes,
     subtotal: totals.subtotal,
+    taxRate: Number(form.taxRate),
     taxAmount: totals.taxAmount,
     discountAmount: totals.discountAmount,
     totalAmount: totals.total,
     shipping: totals.shipping,
+    contactLine,
+    brandAddress: selectedBrand?.address || "",
+    brandHeader: selectedBrand?.pdfHeader || "",
+    footerText,
     paymentInstructions: builder.paymentInstructions,
     terms: builder.terms,
     editor: previewEditor,
   };
 
+  /* ------------------------------------------------------------------ */
+  /* Render                                                              */
+  /* ------------------------------------------------------------------ */
+
   const previewPanel = (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
-          <p className="text-sm font-semibold">Live preview</p>
-          <p className="text-[11px] text-muted-foreground">Updates as you type</p>
+          <p className="text-sm font-semibold">Live PDF preview</p>
+          <p className="text-[11px] text-muted-foreground">Click any text in the document to edit it</p>
         </div>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setExpandOpen(true)} title="Expand preview">
-            <Maximize2 className="size-3.5" /> <span className="hidden sm:inline">Expand</span>
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={openPdfPreview} loading={previewing}>
-            <FileText className="size-3.5" /> PDF
+          <div className="flex rounded-lg border border-border bg-muted/40 p-0.5">
+            {(["live", "pdf"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setPdfMode(mode)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-medium capitalize transition-colors",
+                  pdfMode === mode ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {mode === "live" ? "Live" : "PDF pages"}
+              </button>
+            ))}
+          </div>
+          <Button type="button" variant="ghost" size="icon" onClick={() => setExpandOpen(true)} title="Expand preview">
+            <Maximize2 className="size-4" />
           </Button>
           <Button type="button" variant="ghost" size="icon" onClick={downloadPdf} title="Download PDF">
             <ArrowDownToLine className="size-4" />
           </Button>
         </div>
       </div>
-      <div className="max-h-[calc(100vh-11rem)] overflow-y-auto bg-neutral-50 p-4">
-        <InvoiceDesignPreview {...previewProps} />
-        <p className="mt-3 px-1 text-[10px] text-muted-foreground">
-          The PDF shows the exact document, including all pages. Internal notes are never shown to customers.
-        </p>
+      <div className="max-h-[calc(100vh-11.5rem)] overflow-y-auto bg-neutral-50 p-3 sm:p-4">
+        {pdfMode === "live" ? (
+          <div className="mx-auto w-full max-w-[794px]">
+            <InvoiceDesignPreview {...previewProps} className="!shadow-none" />
+          </div>
+        ) : pdfUrl ? (
+          <PdfFrame src={pdfUrl} className="h-[calc(100vh-14rem)] min-h-[520px] border-0 bg-transparent" />
+        ) : (
+          <div className="flex h-[520px] items-center justify-center"><Spinner /></div>
+        )}
+      </div>
+      <div className="flex items-center justify-between border-t border-border bg-card px-4 py-2 text-[10px] text-muted-foreground">
+        <span>{pdfMode === "live" ? "Instant document preview" : "Exact paginated PDF, auto-refreshed"}</span>
+        <span>Internal notes are never printed</span>
       </div>
     </div>
   );
 
-  const renderStep = () => {
-    switch (activeStep) {
-      /* ---------------- 1. Invoice ---------------- */
-      case 0:
-        return (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Invoice details</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Choose the company and set the dates for this invoice.</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Company / brand" required hint="Its logo, colours and payment details are used automatically">
-                <Select value={form.brandId} onChange={(e) => changeBrand(e.target.value)} required>
-                  <option value="" disabled>Select a company</option>
-                  {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Invoice number" hint="Generated automatically — never changed">
-                <div className="flex h-9 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm font-medium">
-                  {form.number || savedInvoice?.number || <span className="text-muted-foreground">Generated on save</span>}
-                </div>
-              </Field>
-              <Field label="Issue date" required>
-                <Input type="date" value={form.issueDate} onChange={(e) => set("issueDate", e.target.value)} required />
-              </Field>
-              <Field label="Payment due date">
-                <Input type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
-              </Field>
-              <Field label="Currency">
-                <Select value={form.currency} onChange={(e) => set("currency", e.target.value)}>
-                  {currencyOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-                </Select>
-              </Field>
-            </div>
-            {selectedBrand && (
-              <Group title="Brand identity" description="Saved with this company and applied to the invoice design.">
-                <div className="flex flex-wrap items-start gap-4">
-                  <div className="flex size-16 items-center justify-center overflow-hidden rounded-xl border border-border bg-white p-1.5">
-                    <img src={selectedBrand.logoUrl || undefined} alt={selectedBrand.name} className="max-h-full max-w-full object-contain" />
-                  </div>
-                  <div className="min-w-0 flex-1 text-xs">
-                    <p className="text-sm font-semibold">{selectedBrand.businessName || selectedBrand.name}</p>
-                    {selectedBrand.address && <p className="mt-1 whitespace-pre-line text-muted-foreground">{selectedBrand.address}</p>}
-                    <p className="text-muted-foreground">{[selectedBrand.email, selectedBrand.phone, selectedBrand.website].filter(Boolean).join("  ·  ")}</p>
-                    <p className="mt-2 text-muted-foreground">
-                      Saved design: <span className="font-medium text-foreground">{LAYOUT_LABEL[effectiveDesign.layout]}</span>
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(["primary", "secondary", "accent", "supporting"] as const).map((role) => (
-                      <span key={role} className="size-6 rounded-full border border-black/10 shadow-sm" style={{ background: effectiveDesign.colors[role] }} title={`${role}: ${effectiveDesign.colors[role]}`} />
-                    ))}
-                  </div>
-                </div>
-              </Group>
-            )}
-          </div>
-        );
-
-      /* ---------------- 2. Customer ---------------- */
-      case 1:
-        return (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Customer</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Search an existing customer or add a new one.</p>
-            </div>
-            <div className="flex flex-wrap items-start gap-2">
-              <div className="relative min-w-[240px] flex-1">
-                <div className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3">
-                  <Search className="size-4 shrink-0 text-muted-foreground" />
-                  <input
-                    className="h-full flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                    placeholder={selectedClient ? selectedClient.name : "Search by name or email…"}
-                    value={clientSearch}
-                    onFocus={() => setPickerOpen(true)}
-                    onChange={(e) => { setClientSearch(e.target.value); setPickerOpen(true); }}
-                  />
-                  {form.clientId && (
-                    <button type="button" onClick={() => { set("clientId", ""); setClientSearch(""); }} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
-                  )}
-                  <ChevronDown className="size-4 text-muted-foreground" />
-                </div>
-                {pickerOpen && (
-                  <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
-                    {filteredClients.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">No customers found.</p>}
-                    {filteredClients.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => selectClient(c.id)}
-                        className={cn("flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-xs hover:bg-muted", c.id === form.clientId && "bg-primary/5")}
-                      >
-                        <span className="font-medium">{c.name}</span>
-                        <span className="truncate text-muted-foreground">{c.email || ""}</span>
-                      </button>
-                    ))}
-                    <button type="button" onClick={() => { setPickerOpen(false); setQuickClientOpen(true); }} className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-border px-3 py-2 text-xs font-medium text-primary hover:bg-muted">
-                      <UserPlus className="size-3.5" /> Add New Customer
-                    </button>
-                  </div>
-                )}
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => setQuickClientOpen(true)}><UserPlus className="size-3.5" /> New</Button>
-            </div>
-            {selectedClient ? (
-              <Group
-                title="Selected customer"
-                description="Billing and shipping details for this invoice."
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">{selectedClient.name}</p>
-                    <p className="text-xs text-muted-foreground">{[selectedClient.email, selectedClient.phone].filter(Boolean).join("  ·  ")}</p>
-                    {builder.customerCompany && <p className="text-xs text-muted-foreground">{builder.customerCompany}</p>}
-                  </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditCustomer((v) => !v)}>
-                    {editCustomer ? "Done" : "Edit Customer Details"}
-                  </Button>
-                </div>
-                {editCustomer && (
-                  <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
-                    <Field label="Company name"><Input value={builder.customerCompany} onChange={(e) => setBuilderField("customerCompany", e.target.value)} placeholder={selectedClient.name} /></Field>
-                    <Field label="Tax identification number"><Input value={builder.customerTaxId} onChange={(e) => setBuilderField("customerTaxId", e.target.value)} placeholder="Optional" /></Field>
-                    <Field label="Billing address"><Textarea rows={3} value={builder.billingAddress || selectedClient.address || ""} onChange={(e) => setBuilderField("billingAddress", e.target.value)} placeholder="Street, city, state, postcode" /></Field>
-                    <Field label="Shipping address"><Textarea rows={3} value={builder.shippingAddress} onChange={(e) => setBuilderField("shippingAddress", e.target.value)} placeholder="Optional" /></Field>
-                  </div>
-                )}
-              </Group>
-            ) : (
-              <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-xs text-muted-foreground">
-                No customer selected yet.
-              </div>
-            )}
-          </div>
-        );
-
-      /* ---------------- 3. Items ---------------- */
-      case 2:
-        return (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Invoice items</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Drag rows to reorder. Every amount recalculates instantly.</p>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[800px] text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                    <th className="w-8 px-2 py-2" />
-                    <th className="px-2 py-2 text-left">Description</th>
-                    <th className="w-16 px-2 py-2 text-right">Qty</th>
-                    <th className="w-28 px-2 py-2 text-right">Unit price</th>
-                    <th className="w-24 px-2 py-2 text-right">Discount</th>
-                    <th className="w-20 px-2 py-2 text-right">Tax %</th>
-                    <th className="w-24 px-2 py-2 text-right">Total</th>
-                    <th className="w-20 px-2 py-2" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {items.map((item, index) => {
-                    const itemId = item.id || `row-${index}`;
-                    return (
-                      <tr
-                        key={itemId}
-                        draggable
-                        onDragStart={() => setDragIndex(index)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => { if (dragIndex !== null) moveItem(dragIndex, index); setDragIndex(null); }}
-                        onDragEnd={() => setDragIndex(null)}
-                        className={cn("align-top", dragIndex === index ? "opacity-50" : "hover:bg-muted/20")}
-                      >
-                        <td className="px-2 py-3"><GripVertical className="size-4 cursor-grab text-muted-foreground" aria-label="Drag to reorder" /></td>
-                        <td className="px-2 py-3">
-                          <RichTextEditor value={item.description} onChange={(html) => updateItem(index, { description: html })} placeholder="What did you provide?" minHeight="44px" />
-                          <div className="mt-1 flex items-center gap-2">
-                            <button type="button" className="text-[10px] font-medium text-primary underline" onClick={() => setExpandedItemNotes((s) => ({ ...s, [itemId]: !s[itemId] }))}>
-                              {expandedItemNotes[itemId] ? "Hide note" : "Item note"}
-                            </button>
-                            <button type="button" className="text-[10px] font-medium text-primary underline" onClick={() => duplicateItem(index)}>Duplicate</button>
-                          </div>
-                          {expandedItemNotes[itemId] && (
-                            <Textarea className="mt-2" rows={2} value={item.notes || ""} onChange={(e) => updateItem(index, { notes: e.target.value })} placeholder="Note for this line (not printed)" />
-                          )}
-                        </td>
-                        <td className="px-2 py-3"><Input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(index, { quantity: Number(e.target.value) })} aria-label="Quantity" /></td>
-                        <td className="px-2 py-3"><Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={(e) => updateItem(index, { unitPrice: Number(e.target.value) })} aria-label="Unit price" /></td>
-                        <td className="px-2 py-3"><Input type="number" min={0} step="0.01" value={item.discount ?? 0} onChange={(e) => updateItem(index, { discount: Number(e.target.value) })} aria-label="Line discount" /></td>
-                        <td className="px-2 py-3">
-                          <Input
-                            type="number" min={0} max={100} step="0.01"
-                            value={item.taxRate ?? ""}
-                            onChange={(e) => updateItem(index, { taxRate: e.target.value === "" ? undefined : Number(e.target.value) })}
-                            placeholder={String(form.taxRate)} aria-label="Line tax percent"
-                          />
-                        </td>
-                        <td className="px-2 py-3 text-right font-semibold tabular-nums">{money(lineTotal(item), form.currency)}</td>
-                        <td className="px-2 py-3 text-right">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(index)} disabled={items.length === 1} aria-label="Remove item">
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={addItem}><Plus className="size-4" /> Add Item</Button>
-          </div>
-        );
-
-      /* ---------------- 4. Summary ---------------- */
-      case 3:
-        return (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Financial summary</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Adjustments apply instantly to the total and preview.</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Tax rate (%)" hint="Default for lines without their own rate">
-                <Input type="number" min={0} max={100} step="0.01" value={form.taxRate} onChange={(e) => set("taxRate", Number(e.target.value))} />
-              </Field>
-              <Field label="Overall discount">
-                <Input type="number" min={0} step="0.01" value={form.discountAmount} onChange={(e) => set("discountAmount", Number(e.target.value))} />
-              </Field>
-              <Field label="Shipping / additional">
-                <Input type="number" min={0} step="0.01" value={builder.shipping} onChange={(e) => setBuilderField("shipping", Number(e.target.value))} />
-              </Field>
-            </div>
-            <div className="rounded-xl border border-border bg-muted/20 p-5">
-              <div className="space-y-2">
-                <SummaryRow label="Subtotal" value={money(totals.subtotal, form.currency)} />
-                {totals.itemDiscounts > 0 && <SummaryRow label="Item discounts" value={`- ${money(totals.itemDiscounts, form.currency)}`} muted />}
-                <SummaryRow label="Tax" value={money(totals.taxAmount, form.currency)} />
-                {totals.discountAmount > 0 && <SummaryRow label="Overall discount" value={`- ${money(totals.discountAmount, form.currency)}`} muted />}
-                {totals.shipping > 0 && <SummaryRow label="Shipping / additional charges" value={money(totals.shipping, form.currency)} />}
-              </div>
-              <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">
-                <span className="text-xs font-bold uppercase tracking-wide">Total</span>
-                <span className="text-2xl font-extrabold tracking-tight tabular-nums">{money(totals.total, form.currency)}</span>
-              </div>
-              <div className="mt-4 space-y-2 border-t border-border pt-4">
-                <SummaryRow label="Amount paid" value={money(amountPaid, form.currency)} muted />
-                <SummaryRow label="Remaining balance" value={money(balance, form.currency)} strong />
-              </div>
-            </div>
-          </div>
-        );
-
-      /* ---------------- 5. Payment ---------------- */
-      case 4:
-        return (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Payment</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Tell the customer how and when to pay.</p>
-            </div>
-            <Group title="Payment methods" description="Card payments use the brand's Square connection.">
-              <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs">
-                <Lock className="size-3.5 text-success" />
-                Secure card payment{selectedBrand?.paymentEnabled === false ? " (currently disabled)" : " via Square"}
-              </div>
-              <div className="mt-3">
-                <Field label="Deposit requirement">
-                  <Select value={builder.depositRequired ? "yes" : "no"} onChange={(e) => setBuilderField("depositRequired", e.target.value === "yes")}>
-                    <option value="no">No deposit required</option>
-                    <option value="yes">Deposit required before work begins</option>
-                  </Select>
-                </Field>
-              </div>
-            </Group>
-            <Group title="Terms & instructions" description="Shown on the client page, PDF and email.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Payment terms" hint="e.g. Net 14, due on receipt">
-                  <Input value={builder.paymentTerms} onChange={(e) => setBuilderField("paymentTerms", e.target.value)} placeholder="Payment is due within 14 days" />
-                </Field>
-                <Field label="Payment instructions" hint="Bank details, reference, etc.">
-                  <Input value={builder.paymentInstructions} onChange={(e) => setBuilderField("paymentInstructions", e.target.value)} placeholder="Pay via bank transfer…" />
-                </Field>
-              </div>
-            </Group>
-          </div>
-        );
-
-      /* ---------------- 6. Additional details ---------------- */
-      case 5:
-        return (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Additional details</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Keep customer-facing information separate from internal notes.</p>
-            </div>
-            <Group title="Customer-facing" description="Printed on the invoice and shown on the payment page.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Customer notes"><Textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Thank you for your business…" /></Field>
-                <Field label="Terms & conditions"><Textarea rows={3} value={builder.terms} onChange={(e) => setBuilderField("terms", e.target.value)} placeholder="Late payments may incur…" /></Field>
-              </div>
-            </Group>
-            <Group title="Internal only" description="Never displayed on customer PDFs or payment pages.">
-              <Field label="Internal notes"><Textarea rows={2} value={builder.internalNotes} onChange={(e) => setBuilderField("internalNotes", e.target.value)} placeholder="e.g. Follow up next week" /></Field>
-            </Group>
-            <Group title={`Attachments (${builder.attachments.length})`} description="Images up to 10 MB each.">
-              <div className="flex flex-wrap gap-2">
-                {builder.attachments.map((a) => (
-                  <span key={a.url} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs">
-                    <Paperclip className="size-3.5" />
-                    <a href={a.url} target="_blank" rel="noreferrer" className="max-w-[180px] truncate hover:underline">{a.name}</a>
-                    <button type="button" onClick={() => setBuilderField("attachments", builder.attachments.filter((x) => x.url !== a.url))} className="text-muted-foreground hover:text-destructive"><X className="size-3.5" /></button>
-                  </span>
-                ))}
-                <input ref={attachmentRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void addAttachment(e.target.files?.[0]); e.target.value = ""; }} />
-                <Button type="button" variant="outline" size="sm" loading={uploading} onClick={() => attachmentRef.current?.click()}><Paperclip className="size-3.5" /> Attach image</Button>
-              </div>
-            </Group>
-          </div>
-        );
-
-      /* ---------------- 7. Design ---------------- */
-      case 6:
-        return (
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight">Design & branding</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Choose a template and colours. The preview updates immediately.</p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => { setDesignOverride(null); setDesignTouched(true); setDirty(true); }}
-              >
-                Reset to Brand Defaults
-              </Button>
-            </div>
-            <InvoiceDesignEditor
-              value={effectiveDesign}
-              onChange={(d) => { setDesignOverride(d); setDesignTouched(true); setDirty(true); }}
-              palette={selectedBrand?.logoPalette || []}
-              logoUrl={selectedBrand?.logoUrl}
-              businessName={selectedBrand?.businessName || selectedBrand?.name}
-              savedDesign={brandDesign}
-              onReset={() => { setDesignOverride(null); setDesignTouched(true); setDirty(true); }}
-              hidePreview
-            />
-            <Group title="Document settings" description="Used for the downloadable PDF.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Paper size">
-                  <Select value={builder.paperSize} onChange={(e) => setBuilderField("paperSize", e.target.value as BuilderData["paperSize"])}>
-                    <option value="A4">A4 (210 × 297 mm)</option>
-                    <option value="LETTER">US Letter (8.5 × 11 in)</option>
-                  </Select>
-                </Field>
-                <Field label="Typography">
-                  <Select value={builder.typography} onChange={(e) => setBuilderField("typography", e.target.value as BuilderData["typography"])}>
-                    <option value="sans">Modern sans-serif</option>
-                    <option value="serif">Classic serif</option>
-                    <option value="mono">Monospaced</option>
-                  </Select>
-                </Field>
-              </div>
-            </Group>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background">
-      {/* -------------------------- TOP TOOLBAR -------------------------- */}
+      {/* -------------------------- TOP ACTIONS -------------------------- */}
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-2 px-4 py-3 lg:px-8">
-          <Button type="button" variant="ghost" size="sm" onClick={() => navigate("/dashboard/invoices")}>
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2.5 lg:px-6">
+          <Button type="button" variant="ghost" size="sm" onClick={() => (dirty ? setCancelOpen(true) : navigate("/dashboard/invoices"))}>
             <ArrowLeft className="size-4" /> <span className="hidden sm:inline">Back</span>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={startNewInvoice}>
+            <Plus className="size-4" /> <span className="hidden sm:inline">New Invoice</span>
           </Button>
           <div className="mx-1 h-5 w-px bg-border" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{savedInvoice?.number || "New Invoice"}</p>
             <p className="text-[10px] text-muted-foreground">{isEdit ? "Edit invoice" : "Create invoice"}</p>
           </div>
-          <div className="ml-2"><StatusBadge status={savedInvoice ? savedInvoice.displayStatus || savedInvoice.status : "DRAFT"} /></div>
-          <div className="ml-auto flex items-center gap-1.5">
-            <Button type="button" variant="outline" size="sm" onClick={openPdfPreview} loading={previewing}>
+          <div className="ml-2 flex items-center gap-1.5">
+            <StatusBadge status={savedInvoice ? savedInvoice.displayStatus || savedInvoice.status : "DRAFT"} />
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {savedInvoice ? "Saved" : "Draft"}
+            </span>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <Button type="button" variant="outline" size="sm" onClick={openPdfPreview} loading={pdfGenerating}>
               <FileText className="size-3.5" /> PDF
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setExpandOpen(true)} className="hidden lg:inline-flex">
+            <Button type="button" variant="outline" size="sm" onClick={() => setExpandOpen(true)}>
               <Eye className="size-3.5" /> Preview
             </Button>
-            <Button type="button" variant="secondary" size="sm" className="lg:hidden" onClick={() => setMobileTab((t) => (t === "edit" ? "preview" : "edit"))}>
-              <Eye className="size-3.5" /> {mobileTab === "edit" ? "Preview" : "Edit"}
+            <Button type="button" variant="outline" size="sm" onClick={() => void save(false)} loading={submitting}>
+              <Check className="size-3.5" /> Save Invoice
+            </Button>
+            <Button type="button" size="sm" onClick={() => void save(true)} loading={submitting || sending} disabled={savedInvoice?.status === "PAID"}>
+              <Send className="size-3.5" /> Send Invoice
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] px-4 py-5 lg:px-8">
-        <StepNav active={activeStep} completed={completedSteps} onSelect={goToStep} />
-
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(380px,460px)] xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
+      <main className="mx-auto w-full max-w-[1600px] px-4 py-4 lg:px-6">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,560px)]">
           {/* -------------------------- EDITOR -------------------------- */}
-          <div className={cn("min-w-0", mobileTab === "preview" && "hidden lg:block")}>
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm transition-all sm:p-6">
-              {renderStep()}
-            </div>
-
-            <div className="sticky bottom-3 z-20 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card/95 p-2 shadow-lg backdrop-blur">
-              <div className="flex items-center gap-1">
-                <Button type="button" variant="ghost" size="sm" onClick={() => goToStep(activeStep - 1)} disabled={activeStep === 0}>
-                  <ChevronLeft className="size-4" /> Previous
-                </Button>
-                <span className="px-1 text-[11px] text-muted-foreground">Step {activeStep + 1} of {STEPS.length}</span>
-                <Button type="button" variant="ghost" size="sm" onClick={goNext} disabled={activeStep === STEPS.length - 1}>
-                  Next <ChevronRight className="size-4" />
-                </Button>
+          <div className="min-w-0 space-y-4">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+              <div className="mb-4">
+                <h1 className="text-lg font-semibold tracking-tight">Invoice editor</h1>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Select a brand, then edit anywhere on this page or directly on the document. Everything updates the preview instantly.
+                </p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setCancelOpen(true)}>Cancel</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void save(false)} loading={submitting}>
-                  <Check className="size-3.5" /> Save Invoice
-                </Button>
-                <Button type="button" size="sm" onClick={() => void save(true)} loading={submitting || sending} disabled={savedInvoice?.status === "PAID"}>
-                  <Send className="size-3.5" /> Send Invoice
-                </Button>
+
+              <div className="space-y-4">
+                <Group title="Company / brand" description="Its saved logo, colours, company details and payment details are applied automatically.">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Company / brand" required>
+                      <Select value={form.brandId} onChange={(e) => changeBrand(e.target.value)} required>
+                        <option value="" disabled>Select a company</option>
+                        {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="Invoice number" hint="Generated automatically — never changed">
+                      <div className="flex h-9 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm font-medium">
+                        {form.number || savedInvoice?.number || <span className="text-muted-foreground">Generated on save</span>}
+                      </div>
+                    </Field>
+                    <Field label="Issue date" required>
+                      <Input type="date" value={form.issueDate} onChange={(e) => set("issueDate", e.target.value)} required />
+                    </Field>
+                    <Field label="Payment due date">
+                      <Input type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
+                    </Field>
+                    <Field label="Currency">
+                      <Select value={form.currency} onChange={(e) => set("currency", e.target.value)}>
+                        {currencyOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </Select>
+                    </Field>
+                  </div>
+                  {selectedBrand && (
+                    <div className="mt-4 flex flex-wrap items-start gap-4 rounded-lg border border-border bg-muted/20 p-3">
+                      <div className="flex size-14 items-center justify-center overflow-hidden rounded-lg border border-border bg-white p-1">
+                        <AssetImage
+                          src={selectedBrand.logoUrl}
+                          alt={selectedBrand.name}
+                          className="max-h-full max-w-full object-contain"
+                          fallback={<span className="text-xs font-bold">{selectedBrand.name.slice(0, 2).toUpperCase()}</span>}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 text-xs">
+                        <p className="text-sm font-semibold">{selectedBrand.businessName || selectedBrand.name}</p>
+                        {selectedBrand.address && <p className="mt-1 whitespace-pre-line text-muted-foreground">{selectedBrand.address}</p>}
+                        <p className="text-muted-foreground">{[selectedBrand.email, selectedBrand.phone, selectedBrand.website].filter(Boolean).join("  ·  ")}</p>
+                        <p className="mt-2 text-muted-foreground">
+                          Invoice style: <span className="font-medium text-foreground">{LAYOUT_LABEL[effectiveDesign.layout]}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["primary", "secondary", "accent", "supporting"] as const).map((role) => (
+                          <span key={role} className="size-6 rounded-full border border-black/10 shadow-sm" style={{ background: effectiveDesign.colors[role] }} title={`${role}: ${effectiveDesign.colors[role]}`} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Group>
+
+                <Group title="Customer details" description="Search an existing customer or add a new one. All fields below can be edited for this invoice only.">
+                  <div className="flex flex-wrap items-start gap-2">
+                    <div className="relative min-w-[240px] flex-1">
+                      <div className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3">
+                        <Search className="size-4 shrink-0 text-muted-foreground" />
+                        <input
+                          className="h-full flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                          placeholder={selectedClient ? selectedClient.name : "Search by name or email…"}
+                          value={clientSearch}
+                          onFocus={() => setPickerOpen(true)}
+                          onChange={(e) => { setClientSearch(e.target.value); setPickerOpen(true); }}
+                        />
+                        {form.clientId && (
+                          <button type="button" onClick={() => { set("clientId", ""); setClientSearch(""); }} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+                        )}
+                        <ChevronDownIcon />
+                      </div>
+                      {pickerOpen && (
+                        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
+                          {filteredClients.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">No customers found.</p>}
+                          {filteredClients.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => selectClient(c.id)}
+                              className={cn("flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-xs hover:bg-muted", c.id === form.clientId && "bg-primary/5")}
+                            >
+                              <span className="font-medium">{c.name}</span>
+                              <span className="truncate text-muted-foreground">{c.email || ""}</span>
+                            </button>
+                          ))}
+                          <button type="button" onClick={() => { setPickerOpen(false); setQuickClientOpen(true); }} className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-border px-3 py-2 text-xs font-medium text-primary hover:bg-muted">
+                            <UserPlus className="size-3.5" /> Add New Customer
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setQuickClientOpen(true)}><UserPlus className="size-3.5" /> New</Button>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <Field label="Customer display name">
+                      <Input value={builder.clientName || selectedClient?.name || ""} onChange={(e) => setBuilderField("clientName", e.target.value)} placeholder="Name shown on the invoice" />
+                    </Field>
+                    <Field label="Customer email">
+                      <Input type="email" value={builder.customerEmail || selectedClient?.email || ""} onChange={(e) => setBuilderField("customerEmail", e.target.value)} placeholder="name@example.com" />
+                    </Field>
+                    <Field label="Company name">
+                      <Input value={builder.customerCompany} onChange={(e) => setBuilderField("customerCompany", e.target.value)} placeholder="Optional" />
+                    </Field>
+                    <Field label="Tax identification number">
+                      <Input value={builder.customerTaxId} onChange={(e) => setBuilderField("customerTaxId", e.target.value)} placeholder="Optional" />
+                    </Field>
+                    <Field label="Billing address">
+                      <Textarea rows={2} value={builder.billingAddress || selectedClient?.address || ""} onChange={(e) => setBuilderField("billingAddress", e.target.value)} placeholder="Street, city, state, postcode" />
+                    </Field>
+                    <Field label="Shipping address">
+                      <Textarea rows={2} value={builder.shippingAddress} onChange={(e) => setBuilderField("shippingAddress", e.target.value)} placeholder="Optional" />
+                    </Field>
+                  </div>
+                </Group>
+
+                <Group title="Products & services" description="Drag rows to reorder. Amounts recalculate instantly and flow into the preview.">
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full min-w-[760px] text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          <th className="w-8 px-2 py-2" />
+                          <th className="px-2 py-2 text-left">Description</th>
+                          <th className="w-20 px-2 py-2 text-right">Qty</th>
+                          <th className="w-28 px-2 py-2 text-right">Unit price</th>
+                          <th className="w-24 px-2 py-2 text-right">Discount</th>
+                          <th className="w-20 px-2 py-2 text-right">Tax %</th>
+                          <th className="w-24 px-2 py-2 text-right">Total</th>
+                          <th className="w-10 px-2 py-2" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {items.map((item, index) => {
+                          const itemId = item.id || `row-${index}`;
+                          return (
+                            <tr
+                              key={itemId}
+                              draggable
+                              onDragStart={() => setDragIndex(index)}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={() => { if (dragIndex !== null) moveItem(dragIndex, index); setDragIndex(null); }}
+                              onDragEnd={() => setDragIndex(null)}
+                              className={cn("align-top", dragIndex === index ? "opacity-50" : "hover:bg-muted/20")}
+                            >
+                              <td className="px-2 py-3"><GripVertical className="size-4 cursor-grab text-muted-foreground" aria-label="Drag to reorder" /></td>
+                              <td className="px-2 py-3">
+                                <RichTextEditor value={item.description} onChange={(html) => updateItem(index, { description: html })} placeholder="What did you provide?" minHeight="40px" />
+                                <div className="mt-1 flex items-center gap-2">
+                                  <button type="button" className="text-[10px] font-medium text-primary underline" onClick={() => setExpandedItemNotes((s) => ({ ...s, [itemId]: !s[itemId] }))}>
+                                    {expandedItemNotes[itemId] ? "Hide note" : "Item note"}
+                                  </button>
+                                  <button type="button" className="text-[10px] font-medium text-primary underline" onClick={() => duplicateItem(index)}>Duplicate</button>
+                                </div>
+                                {expandedItemNotes[itemId] && (
+                                  <Textarea className="mt-2" rows={2} value={item.notes || ""} onChange={(e) => updateItem(index, { notes: e.target.value })} placeholder="Note for this line (not printed)" />
+                                )}
+                              </td>
+                              <td className="px-2 py-3"><Input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(index, { quantity: Number(e.target.value) })} aria-label="Quantity" /></td>
+                              <td className="px-2 py-3"><Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={(e) => updateItem(index, { unitPrice: Number(e.target.value) })} aria-label="Unit price" /></td>
+                              <td className="px-2 py-3"><Input type="number" min={0} step="0.01" value={item.discount ?? 0} onChange={(e) => updateItem(index, { discount: Number(e.target.value) })} aria-label="Line discount" /></td>
+                              <td className="px-2 py-3">
+                                <Input
+                                  type="number" min={0} max={100} step="0.01"
+                                  value={item.taxRate ?? ""}
+                                  onChange={(e) => updateItem(index, { taxRate: e.target.value === "" ? undefined : Number(e.target.value) })}
+                                  placeholder={String(form.taxRate)} aria-label="Line tax percent"
+                                />
+                              </td>
+                              <td className="px-2 py-3 text-right font-semibold tabular-nums">{money(lineTotal(item), form.currency)}</td>
+                              <td className="px-2 py-3 text-right">
+                                <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(index)} disabled={items.length === 1} aria-label="Remove item">
+                                  <Trash2 className="size-4 text-destructive" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addItem}><Plus className="size-4" /> Add Item</Button>
+                </Group>
+
+                <Group title="Totals & adjustments" description="Tax, discount and shipping apply instantly to the document and PDF.">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Field label="Tax rate (%)">
+                      <Input type="number" min={0} max={100} step="0.01" value={form.taxRate} onChange={(e) => set("taxRate", Number(e.target.value))} />
+                    </Field>
+                    <Field label="Overall discount">
+                      <Input type="number" min={0} step="0.01" value={form.discountAmount} onChange={(e) => set("discountAmount", Number(e.target.value))} />
+                    </Field>
+                    <Field label="Shipping / additional">
+                      <Input type="number" min={0} step="0.01" value={builder.shipping} onChange={(e) => setBuilderField("shipping", Number(e.target.value))} />
+                    </Field>
+                  </div>
+                  <div className="mt-4 rounded-lg border border-border bg-muted/20 p-4">
+                    <div className="space-y-2">
+                      <SummaryRow label="Subtotal" value={money(totals.subtotal, form.currency)} />
+                      {totals.itemDiscounts > 0 && <SummaryRow label="Item discounts" value={`- ${money(totals.itemDiscounts, form.currency)}`} muted />}
+                      <SummaryRow label="Tax" value={money(totals.taxAmount, form.currency)} />
+                      {totals.discountAmount > 0 && <SummaryRow label="Overall discount" value={`- ${money(totals.discountAmount, form.currency)}`} muted />}
+                      {totals.shipping > 0 && <SummaryRow label="Shipping / additional charges" value={money(totals.shipping, form.currency)} />}
+                    </div>
+                    <div className="mt-3 flex items-baseline justify-between border-t border-border pt-3">
+                      <span className="text-xs font-bold uppercase tracking-wide">Total</span>
+                      <span className="text-2xl font-extrabold tracking-tight tabular-nums">{money(totals.total, form.currency)}</span>
+                    </div>
+                    <div className="mt-3 space-y-2 border-t border-border pt-3">
+                      <SummaryRow label="Amount paid" value={money(amountPaid, form.currency)} muted />
+                      <SummaryRow label="Remaining balance" value={money(balance, form.currency)} strong />
+                    </div>
+                  </div>
+                </Group>
+
+                <Group title="Payment terms & instructions" description="Shown on the client page, PDF and email.">
+                  <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs">
+                    <Lock className="size-3.5 text-success" />
+                    Secure card payment{selectedBrand?.paymentEnabled === false ? " (currently disabled)" : " via Square"}
+                  </div>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <Field label="Payment terms" hint="e.g. Net 14, due on receipt">
+                      <Input value={builder.paymentTerms} onChange={(e) => setBuilderField("paymentTerms", e.target.value)} placeholder="Payment is due within 14 days" />
+                    </Field>
+                    <Field label="Payment instructions" hint="Bank details, reference, etc.">
+                      <Input value={builder.paymentInstructions} onChange={(e) => setBuilderField("paymentInstructions", e.target.value)} placeholder="Pay via bank transfer…" />
+                    </Field>
+                    <Field label="Deposit requirement">
+                      <Select value={builder.depositRequired ? "yes" : "no"} onChange={(e) => setBuilderField("depositRequired", e.target.value === "yes")}>
+                        <option value="no">No deposit required</option>
+                        <option value="yes">Deposit required before work begins</option>
+                      </Select>
+                    </Field>
+                  </div>
+                </Group>
+
+                <Group title="Notes & additional details" description="Customer-facing notes stay separate from internal information.">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Customer notes">
+                      <Textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Thank you for your business…" />
+                    </Field>
+                    <Field label="Terms & conditions">
+                      <Textarea rows={3} value={builder.terms} onChange={(e) => setBuilderField("terms", e.target.value)} placeholder="Late payments may incur…" />
+                    </Field>
+                  </div>
+                  <div className="mt-4">
+                    <Field label="Internal notes" hint="Never displayed on customer PDFs or payment pages">
+                      <Textarea rows={2} value={builder.internalNotes} onChange={(e) => setBuilderField("internalNotes", e.target.value)} placeholder="e.g. Follow up next week" />
+                    </Field>
+                  </div>
+                  <div className="mt-4 rounded-lg border border-border p-3">
+                    <p className="text-xs font-semibold">Attachments ({builder.attachments.length})</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {builder.attachments.map((a) => (
+                        <span key={a.url} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs">
+                          <Paperclip className="size-3.5" />
+                          <a href={a.url} target="_blank" rel="noreferrer" className="max-w-[180px] truncate hover:underline">{a.name}</a>
+                          <button type="button" onClick={() => setBuilderField("attachments", builder.attachments.filter((x) => x.url !== a.url))} className="text-muted-foreground hover:text-destructive"><X className="size-3.5" /></button>
+                        </span>
+                      ))}
+                      <input ref={attachmentRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void addAttachment(e.target.files?.[0]); e.target.value = ""; }} />
+                      <Button type="button" variant="outline" size="sm" loading={uploading} onClick={() => attachmentRef.current?.click()}><Paperclip className="size-3.5" /> Attach image</Button>
+                    </div>
+                  </div>
+                </Group>
+
+                <Group title="Design & branding" description="Colours come from the selected brand. The same design is used by the preview, PDF and client page.">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <p className="max-w-xl text-xs text-muted-foreground">
+                      One consistent document style. Adjust the brand colours here if needed; layout templates are intentionally hidden.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setDesignOverride(null); setDesignTouched(true); setDirty(true); }}
+                    >
+                      Reset to brand defaults
+                    </Button>
+                  </div>
+                  <div className="mt-4">
+                    <InvoiceDesignEditor
+                      value={effectiveDesign}
+                      onChange={(d) => { setDesignOverride(d); setDesignTouched(true); setDirty(true); }}
+                      palette={selectedBrand?.logoPalette || []}
+                      logoUrl={selectedBrand?.logoUrl}
+                      businessName={selectedBrand?.businessName || selectedBrand?.name}
+                      savedDesign={brandDesign}
+                      onReset={() => { setDesignOverride(null); setDesignTouched(true); setDirty(true); }}
+                      hidePreview
+                      hideLayout
+                    />
+                  </div>
+                  <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+                    <Field label="Paper size">
+                      <Select value={builder.paperSize} onChange={(e) => setBuilderField("paperSize", e.target.value as BuilderData["paperSize"])}>
+                        <option value="A4">A4 (210 × 297 mm)</option>
+                        <option value="LETTER">US Letter (8.5 × 11 in)</option>
+                      </Select>
+                    </Field>
+                    <Field label="Typography">
+                      <Select value={builder.typography} onChange={(e) => setBuilderField("typography", e.target.value as BuilderData["typography"])}>
+                        <option value="sans">Modern sans-serif</option>
+                        <option value="serif">Classic serif</option>
+                        <option value="mono">Monospaced</option>
+                      </Select>
+                    </Field>
+                  </div>
+                </Group>
               </div>
             </div>
           </div>
 
           {/* -------------------------- PREVIEW -------------------------- */}
-          <aside className={cn("hidden lg:block", mobileTab === "preview" && "!block")}>
-            <div className="sticky top-20">{previewPanel}</div>
-          </aside>
+          <aside className="min-w-0 xl:sticky xl:top-[76px]">{previewPanel}</aside>
         </div>
-      </div>
+      </main>
 
       {/* -------------------------- DIALOGS -------------------------- */}
-      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} title="PDF preview" description="The exact document your customer will receive." className="max-w-6xl">
+      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} title="PDF preview" description="The exact paginated document your customer will receive." className="max-w-6xl">
         <div ref={pdfFrameRef} className="relative">
           <Button type="button" variant="outline" size="sm" className="absolute right-2 top-2 z-10" onClick={() => void pdfFrameRef.current?.requestFullscreen?.()}>
             <Maximize2 className="size-3.5" /> Full screen
           </Button>
-          {previewUrl ? <PdfFrame src={previewUrl} className="h-[75vh]" /> : <Spinner />}
+          {pdfUrl ? <PdfFrame src={pdfUrl} className="h-[75vh]" /> : <Spinner />}
         </div>
       </Dialog>
 
@@ -1028,7 +977,7 @@ export default function InvoiceBuilder() {
         </form>
       </Dialog>
 
-      <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} title={dirty ? "Discard changes?" : "Leave the invoice builder?"} description={dirty ? "Your unsaved changes will be lost." : undefined}>
+      <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} title={dirty ? "Discard changes?" : "Leave the invoice editor?"} description={dirty ? "Your unsaved changes will be lost." : undefined}>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => setCancelOpen(false)}>Stay</Button>
           <Button type="button" variant="destructive" onClick={() => navigate("/dashboard/invoices")}>Discard & leave</Button>
@@ -1050,5 +999,13 @@ export default function InvoiceBuilder() {
         </div>
       </Dialog>
     </div>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4 text-muted-foreground" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }

@@ -106,6 +106,14 @@ export function createApp(): Express {
   app.use("/api/payments", paymentRoutes);
   app.use("/api/uploads", uploadRoutes);
 
+  // Uploaded logos are used by the admin app on a different origin and by the
+  // client-facing pages. Helmet defaults would block those cross-origin image
+  // requests, so relax CORP/CORS for static files only.
+  app.use("/uploads", (_req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  });
   app.use("/uploads", express.static(path.resolve(env.upload.dir)));
 
   // Single-app deploy: serve the built frontend (Vite dist) and fall back to

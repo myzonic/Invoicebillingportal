@@ -343,8 +343,19 @@ function loadImage(file: string): LoadedImage | null {
 
 /** Uploaded brand logo stored under the uploads directory, if one exists. */
 function resolveLogo(brand: Brand | null): LoadedImage | null {
-  const uploaded = brand?.logoUrl?.startsWith("/uploads/") ? path.resolve(env.upload.dir, path.basename(brand.logoUrl)) : null;
-  return uploaded && /\.(png|jpe?g)$/i.test(uploaded) ? loadImage(uploaded) : null;
+  const value = brand?.logoUrl;
+  if (!value) return null;
+  let name = "";
+  try {
+    // Accept legacy `/uploads/x.png`, absolute URLs and /api/uploads URLs.
+    const parsed = new URL(value, "http://localhost");
+    const match = parsed.pathname.match(/\/uploads\/([^/]+)$/i);
+    if (match) name = decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+  if (!name || !/\.(png|jpe?g)$/i.test(name)) return null;
+  return loadImage(path.resolve(env.upload.dir, path.basename(name)));
 }
 
 export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
@@ -608,6 +619,9 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const headerDark = design.layout === "corporate" || design.layout === "premium";
   const compact = design.layout === "compact";
   const minimal = design.layout === "minimal";
+  // Inline display overrides from the editor win over brand defaults so the
+  // PDF prints exactly what the sender saw in the live document.
+  const displayBrandName = builder.businessName || brand?.businessName || brand?.name || company.name;
   const runFont = (b: boolean, i: boolean) => (b && i ? boldItalic : b ? bold : i ? italic : font);
 
   const { width, height } = page.getSize();
@@ -634,7 +648,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const rightText = (s: string, xRight: number, yy: number, f: PDFFont, size: number, c: C) =>
     page.drawText(san(s), { x: xRight - f.widthOfTextAtSize(san(s), size), y: yy, size, font: f, color: col(c) });
 
-  const brandName = brand?.businessName || brand?.name || company.name;
+  const brandName = displayBrandName;
   const brandEmail = brand?.email || company.email;
   const brandPhone = brand?.phone || company.phone;
   const brandAddress = brand?.address || company.address;
@@ -687,11 +701,15 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   text(fitText(brandName, headerMaxW, bold, compact ? 13 : 15), headerLeft, headerY, bold, compact ? 13 : 15, titleColor);
   headerY -= compact ? 16 : 19;
   const headerDetails = [
+    [brandEmail, brandPhone, brandWebsite].filter(Boolean).join("  |  "),
     ...String(brandAddress || "")
       .split(/\n/)
       .map((line) => line.trim())
       .filter(Boolean),
-    [brandEmail, brandPhone].filter(Boolean).join("  |  "),
+    ...String(brand?.pdfHeader || "")
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
   ]
     .filter(Boolean)
     .slice(0, 3);
@@ -704,13 +722,16 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   rightText(`# ${invoice.number}`, right, topY + bandH - (compact ? 58 : 72), font, 10.5, headerDark ? mix(WHITE, primary, 0.7) : muted);
 
   // ===================== Bill to / details =====================
+  const clientName = builder.clientName || client.name;
+  const clientEmail = builder.customerEmail || client.email;
+  const clientAddress = builder.billingAddress || client.address;
   const secTop = topY - 42;
   text("BILL TO", margin, secTop, bold, 8, secondary);
-  text(fitText(client.name, 230, bold, 13), margin, secTop - 17, bold, 13, ink);
+  text(fitText(clientName, 230, bold, 13), margin, secTop - 17, bold, 13, ink);
   const clientLines = [
-    client.email,
+    clientEmail,
     client.phone,
-    ...String(client.address || "")
+    ...String(clientAddress || "")
       .split(/\n/)
       .map((line) => line.trim())
       .filter(Boolean),

@@ -30,6 +30,8 @@ export interface InvoiceDesignEditorProps {
   actions?: React.ReactNode;
   /** Hide the big preview (used in tight layouts). */
   hidePreview?: boolean;
+  /** Hide template choices; use this in the single-page invoice editor. */
+  hideLayout?: boolean;
 }
 
 const PRESET_COLORS = ["#111827", "#1f2937", "#0f766e", "#b45309", "#7c2d12", "#1d4ed8", "#4338ca", "#9f1239"];
@@ -51,6 +53,7 @@ export function InvoiceDesignEditor({
   invoiceNumber,
   actions,
   hidePreview,
+  hideLayout,
 }: InvoiceDesignEditorProps) {
   const [openRole, setOpenRole] = useState<keyof InvoiceDesignColors | null>(null);
   const dirty = Boolean(savedDesign) && !sameDesign(value, savedDesign);
@@ -66,39 +69,41 @@ export function InvoiceDesignEditor({
   return (
     <div className="space-y-5">
       {/* ---------------- Layout picker ---------------- */}
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div>
-            <h4 className="text-sm font-semibold">Layout</h4>
-            <p className="text-xs text-muted-foreground">Pick the structure of this brand's invoice.</p>
+      {!hideLayout && (
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold">Layout</h4>
+              <p className="text-xs text-muted-foreground">Pick the structure of this brand's invoice.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {INVOICE_LAYOUTS.map((layout) => {
+              const selected = value.layout === layout.id;
+              return (
+                <button
+                  key={layout.id}
+                  type="button"
+                  onClick={() => onChange({ ...value, layout: layout.id })}
+                  className={cn(
+                    "group rounded-xl border p-2 text-left transition-all",
+                    selected ? "border-primary ring-2 ring-primary/30 shadow-sm" : "border-border bg-card hover:border-primary/40 hover:shadow-sm",
+                  )}
+                >
+                  <div className="h-24 overflow-hidden rounded-lg border border-border bg-white">
+                    <InvoiceLayoutThumb layout={layout.id} colors={value.colors} />
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-1">
+                    <span className={cn("text-xs font-semibold", selected ? "text-primary" : "text-foreground")}>{layout.label}</span>
+                    {selected && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">Selected</span>}
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-muted-foreground">{layout.blurb}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {INVOICE_LAYOUTS.map((layout) => {
-            const selected = value.layout === layout.id;
-            return (
-              <button
-                key={layout.id}
-                type="button"
-                onClick={() => onChange({ ...value, layout: layout.id })}
-                className={cn(
-                  "group rounded-xl border p-2 text-left transition-all",
-                  selected ? "border-primary ring-2 ring-primary/30 shadow-sm" : "border-border bg-card hover:border-primary/40 hover:shadow-sm",
-                )}
-              >
-                <div className="h-24 overflow-hidden rounded-lg border border-border bg-white">
-                  <InvoiceLayoutThumb layout={layout.id} colors={value.colors} />
-                </div>
-                <div className="mt-1.5 flex items-center justify-between gap-1">
-                  <span className={cn("text-xs font-semibold", selected ? "text-primary" : "text-foreground")}>{layout.label}</span>
-                  {selected && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">Selected</span>}
-                </div>
-                <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-muted-foreground">{layout.blurb}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* ---------------- Colour roles ---------------- */}
       <div>

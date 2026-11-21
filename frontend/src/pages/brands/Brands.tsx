@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR, Spinner, EmptyState } from "@/components/ui/table";
 import { Pagination } from "@/components/Pagination";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import AssetImage from "@/components/AssetImage";
 
 export default function Brands() {
   const [page, setPage] = useState(1);
@@ -89,11 +90,12 @@ export default function Brands() {
                 <TD>
                   <div className="flex items-center gap-2">
                     <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
-                      {brand.logoUrl ? (
-                        <img src={brand.logoUrl} alt="" className="h-full w-full object-contain" />
-                      ) : (
-                        <span className="text-xs font-bold">{brand.name.slice(0, 2).toUpperCase()}</span>
-                      )}
+                      <AssetImage
+                        src={brand.logoUrl}
+                        alt={brand.name}
+                        className="h-full w-full object-contain"
+                        fallback={<span className="text-xs font-bold">{brand.name.slice(0, 2).toUpperCase()}</span>}
+                      />
                     </div>
                     <div>
                       <div className="font-medium">

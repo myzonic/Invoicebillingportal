@@ -10,6 +10,8 @@ import {
   useRatesQuery,
 } from "@/app/apiSlice";
 import { errorMessage } from "@/lib/utils";
+import { assetUrl } from "@/lib/assets";
+import AssetImage from "@/components/AssetImage";
 import {
   DEFAULT_INVOICE_DESIGN,
   extractLogoPalette,
@@ -141,7 +143,7 @@ export default function BrandForm() {
         paymentEnabled: b.paymentEnabled ?? true,
         logoUrl: b.logoUrl || "",
       });
-      setPreview(b.logoUrl || "");
+      setPreview(assetUrl(b.logoUrl) || "");
 
       const stored = normalizeInvoiceDesign(b.invoiceDesign);
       const storedPalette = Array.isArray(b.logoPalette) ? b.logoPalette : [];
@@ -154,7 +156,7 @@ export default function BrandForm() {
       setSavedPalette(storedPalette);
       setExtractNote("");
       // No saved palette yet: scan the stored logo once so the colours show up.
-      if (!storedPalette.length && b.logoUrl) void runExtraction(b.logoUrl);
+      if (!storedPalette.length && b.logoUrl) void runExtraction(assetUrl(b.logoUrl) || "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandData]);
@@ -272,11 +274,12 @@ export default function BrandForm() {
             <Field label="Logo">
               <div className="flex items-center gap-3">
                 <div className="flex size-20 items-center justify-center overflow-hidden rounded-lg border border-input bg-muted">
-                  {preview ? (
-                    <img src={preview} alt="Brand logo" className="h-full w-full object-contain" />
-                  ) : (
-                    <ImagePlus className="size-6 text-muted-foreground" />
-                  )}
+                  <AssetImage
+                    src={preview}
+                    alt="Brand logo"
+                    className="h-full w-full object-contain"
+                    fallback={<ImagePlus className="size-6 text-muted-foreground" />}
+                  />
                 </div>
                 <div className="flex flex-col gap-2">
                   <input
