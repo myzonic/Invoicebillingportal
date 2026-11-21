@@ -9,7 +9,7 @@ import Clients from "@/pages/clients/Clients";
 import ClientForm from "@/pages/clients/ClientForm";
 import ClientDetail from "@/pages/clients/ClientDetail";
 import Invoices from "@/pages/invoices/Invoices";
-import InvoiceForm from "@/pages/invoices/InvoiceForm";
+import MinimalInvoiceEditor from "@/components/invoiceBuilder/MinimalInvoiceEditor";
 import InvoiceDetail from "@/pages/invoices/InvoiceDetail";
 import DirectInvoice from "@/pages/invoices/DirectInvoice";
 import InvoiceLogs from "@/pages/invoices/InvoiceLogs";
@@ -47,7 +47,8 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard/main" replace />} />
+        <Route index element={<Navigate to="/dashboard/create" replace />} />
+        <Route path="create" element={<MinimalInvoiceEditor />} />
         <Route path="main" element={<Dashboard />} />
 
         <Route path="clients" element={<Clients />} />
@@ -56,9 +57,9 @@ export default function App() {
         <Route path="clients/update/:id" element={<ClientForm />} />
 
         <Route path="invoices" element={<Invoices />} />
-        <Route path="invoices/add" element={<InvoiceForm />} />
+        <Route path="invoices/add" element={<MinimalInvoiceEditor />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
-        <Route path="invoices/update/:id" element={<InvoiceForm />} />
+        <Route path="invoices/update/:id" element={<MinimalInvoiceEditor />} />
         <Route path="direct-invoice" element={<DirectInvoice />} />
         <Route path="invoice-logs" element={<InvoiceLogs />} />
 
@@ -90,5 +91,5 @@ export default function App() {
 
 function RequireAuthRedirect() {
   const location = useLocation();
-  return tokenStore.access ? <Navigate to="/dashboard/main" replace /> : <Navigate to="/login" replace state={{ from: location }} />;
+  return tokenStore.access ? <Navigate to="/dashboard/create" replace /> : <Navigate to="/login" replace state={{ from: location }} />;
 }

@@ -9,6 +9,7 @@ import { requireAuth } from "../../middleware/auth";
 import { can } from "../../middleware/rbac";
 import { audit } from "../../utils/audit";
 import { renderInvoicePdf } from "../../services/pdf";
+import { designForBrand } from "../../services/invoiceDesign";
 import { computeInvoiceTotals } from "../../services/invoiceMath";
 import { normalizeBuilderData } from "../../services/invoiceBuilder";
 import {
@@ -563,7 +564,7 @@ router.post(
             // Brand colour is read live from the brand, so invoices inherit it
             // without copying a stale value at creation time.
             color: body.color || undefined,
-            designOverride: body.designOverride ?? undefined,
+            designOverride: body.designOverride ?? designForBrand(brand),
             builderData: body.builderData == null ? Prisma.DbNull : body.builderData,
             notes: body.notes,
             issueDate: body.issueDate,
@@ -619,7 +620,7 @@ router.post(
       total,
       currency,
       color: body.color || brand.color || null,
-      designOverride: body.designOverride ?? null,
+      designOverride: body.designOverride ?? designForBrand(brand),
       builderData: body.builderData ?? null,
       status: InvoiceStatus.DRAFT,
       notes: body.notes || null,

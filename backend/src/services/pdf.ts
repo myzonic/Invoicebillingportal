@@ -634,7 +634,9 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const rightText = (s: string, xRight: number, yy: number, f: PDFFont, size: number, c: C) =>
     page.drawText(san(s), { x: xRight - f.widthOfTextAtSize(san(s), size), y: yy, size, font: f, color: col(c) });
 
-  const brandName = brand?.businessName || brand?.name || company.name;
+  // Display overrides saved from inline preview edits win over brand defaults,
+  // so the PDF prints exactly what the sender saw in the editor.
+  const brandName = builder.businessName || brand?.businessName || brand?.name || company.name;
   const brandEmail = brand?.email || company.email;
   const brandPhone = brand?.phone || company.phone;
   const brandAddress = brand?.address || company.address;
@@ -655,7 +657,8 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
     page.drawRectangle({ x: 0, y: topY + bandH - ruleH, width, height: ruleH, color: col(design.layout === "elegant" ? accent : primary) });
     page.drawRectangle({ x: 0, y: topY, width, height: 1, color: col(line) });
   } else {
-    page.drawRectangle({ x: margin, y: topY + 8, width: right - margin, height: 1, color: col(line) });
+    // Minimal: no header band or rule — the brand name's accent rule below
+    // is the only header decoration, matching the live document.
   }
 
   const logoX = margin;
@@ -687,11 +690,15 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   text(fitText(brandName, headerMaxW, bold, compact ? 13 : 15), headerLeft, headerY, bold, compact ? 13 : 15, titleColor);
   headerY -= compact ? 16 : 19;
   const headerDetails = [
+    [brandEmail, brandPhone].filter(Boolean).join("  |  "),
     ...String(brandAddress || "")
       .split(/\n/)
       .map((line) => line.trim())
       .filter(Boolean),
-    [brandEmail, brandPhone].filter(Boolean).join("  |  "),
+    ...String(brand?.pdfHeader || "")
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
   ]
     .filter(Boolean)
     .slice(0, 3);
@@ -699,18 +706,24 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
     text(fitText(lineText, headerMaxW, font, 8.5), headerLeft, headerY, font, 8.5, detailColor);
     headerY -= 12;
   });
+  if (design.layout === "minimal") {
+    page.drawRectangle({ x: headerLeft, y: headerY - 2, width: 44, height: 2, color: col(accent) });
+  }
 
   rightText("INVOICE", right, topY + bandH - (compact ? 40 : 52), bold, compact ? 24 : 30, headerDark ? mix(accent, WHITE, 0.35) : secondary);
   rightText(`# ${invoice.number}`, right, topY + bandH - (compact ? 58 : 72), font, 10.5, headerDark ? mix(WHITE, primary, 0.7) : muted);
 
   // ===================== Bill to / details =====================
+  const clientName = builder.clientName || client.name;
+  const clientEmail = builder.customerEmail || client.email;
+  const clientAddress = builder.billingAddress || client.address;
   const secTop = topY - 42;
   text("BILL TO", margin, secTop, bold, 8, secondary);
-  text(fitText(client.name, 230, bold, 13), margin, secTop - 17, bold, 13, ink);
+  text(fitText(clientName, 230, bold, 13), margin, secTop - 17, bold, 13, ink);
   const clientLines = [
-    client.email,
+    clientEmail,
     client.phone,
-    ...String(client.address || "")
+    ...String(clientAddress || "")
       .split(/\n/)
       .map((line) => line.trim())
       .filter(Boolean),

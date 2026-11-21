@@ -19,7 +19,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/dashboard/main";
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || "/dashboard/create";
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

@@ -29,7 +29,7 @@ export default function Signup() {
       tokenStore.setTokens(result.data.accessToken, result.data.refreshToken);
       dispatch(setUser(result.data.user));
       toast.success("Account created");
-      navigate("/dashboard/main", { replace: true });
+      navigate("/dashboard/create", { replace: true });
     } catch (err) {
       toast.error(errorMessage(err));
     }
