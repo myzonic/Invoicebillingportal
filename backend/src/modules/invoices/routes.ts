@@ -567,7 +567,10 @@ router.post(
             notes: body.notes,
             issueDate: body.issueDate,
             dueDate: body.dueDate,
-            status: InvoiceStatus.DRAFT,
+            // The permalink exists as soon as the invoice is created, so it is
+            // Active immediately and payable from the copied link or email.
+            status: InvoiceStatus.SENT,
+            sentAt: new Date(),
           },
           include: { client: true, brand: true },
         });

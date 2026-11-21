@@ -335,7 +335,7 @@ export default function InvoiceBuilder() {
         await sendInvoice(result.id).unwrap();
         toast.success("Invoice saved and sent to the customer");
       } else {
-        toast.success(isEdit ? "Invoice updated" : "Invoice saved as draft");
+        toast.success(isEdit ? "Invoice updated" : "Invoice saved");
       }
       return result;
     } catch (err) {
@@ -512,7 +512,7 @@ export default function InvoiceBuilder() {
                 <ArrowDownToLine className="size-3.5" /> PDF
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => void save(false)} loading={submitting}>
-                <Check className="size-3.5" /> Save draft
+                <Check className="size-3.5" /> Save Invoice
               </Button>
               <Button type="button" variant="secondary" size="sm" onClick={() => void sendOnly()} loading={sending || submitting} disabled={savedInvoice?.status === "PAID"}>
                 <Send className="size-3.5" /> Send
@@ -551,12 +551,6 @@ export default function InvoiceBuilder() {
                 <Select value={form.currency} onChange={(e) => set("currency", e.target.value)}>
                   {currencyOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                 </Select>
-              </Field>
-              <Field label="Status" hint="Automatic — Draft until sent, then Active / Partially paid / Paid">
-                <div className="flex h-9 items-center gap-2 rounded-lg border border-border bg-muted/50 px-3">
-                  <StatusBadge status={savedInvoice ? savedInvoice.displayStatus || savedInvoice.status : "DRAFT"} />
-                  <span className="text-xs text-muted-foreground">Managed automatically</span>
-                </div>
               </Field>
             </div>
             {selectedBrand && (
