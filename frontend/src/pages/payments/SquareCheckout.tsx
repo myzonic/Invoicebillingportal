@@ -54,7 +54,7 @@ export default function SquareCheckout() {
           setError("");
         }
       } catch {
-        if (!cancelled) setError("Could not lock a payment rate. Please refresh and try again.");
+        // Rate locking is a background concern — don't surface it to the client.
       }
     })();
     return () => {
@@ -160,7 +160,6 @@ export default function SquareCheckout() {
   const handlePay = async () => {
     if (!cardRef.current) return;
     if (!quote) {
-      setError("Preparing a secure rate — please try again in a moment.");
       void refreshQuote();
       return;
     }
@@ -434,9 +433,6 @@ export default function SquareCheckout() {
                 >
                   {money(inv.total, inv.currency)}
                 </span>
-                {quote && (
-                  <p className="mt-0.5 text-[11px] font-medium text-neutral-500">Secure rate locked for this payment</p>
-                )}
               </div>
             </div>
 
