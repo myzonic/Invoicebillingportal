@@ -42,6 +42,16 @@ function itemNet(item: { quantity: number; unitPrice: number; discount?: number 
   return Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0));
 }
 
+/**
+ * Total discount actually applied to the invoice. Older invoices store it on
+ * each line item instead of in `discountAmount`, so both are included here.
+ */
+function effectiveDiscount(invoice: Invoice): number {
+  const items = Array.isArray(invoice.items) ? (invoice.items as Array<{ discount?: number }>) : [];
+  const itemDiscounts = items.reduce((sum, item) => sum + (Number(item?.discount) || 0), 0);
+  return Math.max(0, Number(invoice.discountAmount) + itemDiscounts);
+}
+
 /** Insert Shipping before the final TOTAL row when present. */
 function withShipping(rows: Array<[string, string, boolean]>, builder: BuilderData, currency: string) {
   if (builder.shipping > 0) rows.splice(rows.length - 1, 0, ["Shipping", money(builder.shipping, currency), false]);
@@ -509,8 +519,9 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
     ["Subtotal", money(invoice.subtotal, invoice.currency), false],
     [`Tax (${invoice.taxRate}%)`, money(invoice.taxAmount, invoice.currency), false],
   ];
-  if (Number(invoice.discountAmount) > 0) {
-    totalRows.push([`Discount`, `- ${money(invoice.discountAmount, invoice.currency)}`, false]);
+  const discount = effectiveDiscount(invoice);
+  if (discount > 0) {
+    totalRows.push([`Discount`, `- ${money(discount, invoice.currency)}`, false]);
   }
   totalRows.push(["TOTAL", money(invoice.total, invoice.currency), true]);
   withShipping(totalRows, builder, invoice.currency);
@@ -819,7 +830,8 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
     ["Subtotal", money(invoice.subtotal, invoice.currency), false],
     [`Tax (${invoice.taxRate}%)`, money(invoice.taxAmount, invoice.currency), false],
   ];
-  if (Number(invoice.discountAmount) > 0) totalRows.push(["Discount", `- ${money(invoice.discountAmount, invoice.currency)}`, false]);
+  const discount = effectiveDiscount(invoice);
+  if (discount > 0) totalRows.push(["Discount", `- ${money(discount, invoice.currency)}`, false]);
   totalRows.push(["TOTAL", money(invoice.total, invoice.currency), true]);
   withShipping(totalRows, builder, invoice.currency);
 

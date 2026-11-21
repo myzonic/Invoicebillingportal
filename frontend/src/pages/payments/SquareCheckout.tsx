@@ -114,7 +114,12 @@ export default function SquareCheckout() {
   if (isError || !data) return <EmptyState title="Invoice not available" hint="Check the link and try again." />;
 
   const inv = data.data;
-  const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number }[];
+  const items = (inv.items || []) as { description: string; quantity: number; unitPrice: number; discount?: number }[];
+  // Legacy invoices store the discount per line instead of in discountAmount.
+  const itemDiscount = items.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+  const discountTotal = (Number(inv.discountAmount) || 0) + itemDiscount;
+  const itemNet = (item: (typeof items)[number]) =>
+    Math.max(0, Number(item.quantity) * Number(item.unitPrice) - (Number(item.discount) || 0));
   const brand = inv.brand;
   const company = inv.company || { name: brand?.name || branding.companyName, email: "", phone: "", address: "", website: "" };
   const brandName = brand?.businessName || brand?.name || company.name;
@@ -128,7 +133,6 @@ export default function SquareCheckout() {
   const ink = t ? t.ink : "#171c26";
   const muted = t ? t.muted : "#6b7280";
   const line = t ? t.line : "#e5e7eb";
-  const softFill = t ? t.softFill : "#f9fafb";
   const headerDark = t ? t.headerDark : true;
   const headerText = headerDark ? "#ffffff" : ink;
   const headerMuted = headerDark ? t?.onDarkMuted || "rgba(255,255,255,.75)" : muted;
@@ -230,7 +234,7 @@ export default function SquareCheckout() {
         }}
       />
 
-      <div className="relative mx-auto grid w-full max-w-5xl items-start gap-6 lg:grid-cols-[1fr_400px]">
+      <div className="relative mx-auto grid w-full max-w-[1250px] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
         {/* Left: PDF-style invoice */}
         <Card
           className="overflow-hidden border bg-white text-neutral-900"
@@ -245,16 +249,11 @@ export default function SquareCheckout() {
             }}
           >
             <div className="flex min-w-0 items-start gap-3">
-              <div
-                className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg"
-                style={{
-                  background: headerDark ? "#ffffff" : softFill,
-                  border: `1px solid ${headerDark ? secondary : line}`,
-                  padding: 5,
-                }}
-              >
-                <Logo src={brand?.logoUrl} alt={brandName} className="max-h-full max-w-full" />
-              </div>
+              <Logo
+                src={brand?.logoUrl}
+                alt={brandName}
+                className="h-auto max-h-12 w-auto max-w-[150px] shrink-0 object-contain"
+              />
               <div className="min-w-0">
                 <div className="truncate text-xl font-bold tracking-tight" style={{ color: headerText }}>
                   {brandName}
@@ -323,7 +322,7 @@ export default function SquareCheckout() {
                     </td>
                     <td className="py-2.5 text-right" style={{ color: ink }}>{item.quantity}</td>
                     <td className="py-2.5 text-right" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
-                    <td className="py-2.5 text-right font-medium" style={{ color: ink }}>{money(item.quantity * item.unitPrice, inv.currency)}</td>
+                    <td className="py-2.5 text-right font-medium" style={{ color: ink }}>{money(itemNet(item), inv.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -338,10 +337,10 @@ export default function SquareCheckout() {
                 <span style={{ color: muted }}>Tax ({inv.taxRate}%)</span>
                 <span style={{ color: ink }}>{money(inv.taxAmount, inv.currency)}</span>
               </div>
-              {Number(inv.discountAmount) > 0 && (
+              {discountTotal > 0 && (
                 <div className="flex w-64 justify-between">
                   <span style={{ color: muted }}>Discount</span>
-                  <span style={{ color: ink }}>-{money(inv.discountAmount, inv.currency)}</span>
+                  <span style={{ color: ink }}>-{money(discountTotal, inv.currency)}</span>
                 </div>
               )}
               {Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping || 0) > 0 && (
@@ -389,16 +388,11 @@ export default function SquareCheckout() {
           <CardContent>
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div
-                  className="flex size-16 items-center justify-center overflow-hidden rounded-xl"
-                  style={{
-                    background: `#ffffff`,
-                    boxShadow: `inset 0 1px 0 ${rgba("#ffffff", 0.8)}`,
-                    border: `1px solid ${secondary}`,
-                  }}
-                >
-                  <Logo src={brand?.logoUrl} alt={brand?.name} className="size-12" />
-                </div>
+                <Logo
+                  src={brand?.logoUrl}
+                  alt={brand?.name}
+                  className="h-auto max-h-10 w-auto max-w-[110px] shrink-0 object-contain"
+                />
                 <div>
                   <p className="text-sm font-bold leading-tight text-neutral-900">
                     {brand?.businessName || brand?.name || branding.paymentHost}
