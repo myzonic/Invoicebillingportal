@@ -5,7 +5,6 @@ import { COLOR_ROLES, INVOICE_LAYOUTS, LAYOUT_LABEL, readableOn, sameDesign, sug
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { InvoiceDesignPreview, InvoiceLayoutThumb, type PreviewItem } from "./InvoiceDesignPreview";
-import { FitInvoicePage } from "./FitInvoicePage";
 
 export interface InvoiceDesignEditorProps {
   value: InvoiceDesign;
@@ -266,17 +265,15 @@ export function InvoiceDesignEditor({
               </p>
             </div>
           </div>
-          <FitInvoicePage widthMm={210} className="mx-auto overflow-auto rounded-lg border border-border bg-neutral-50">
-            <InvoiceDesignPreview
-              design={value}
-              logoUrl={logoUrl}
-              businessName={businessName}
-              items={previewItems}
-              currency={currency}
-              clientName={clientName}
-              invoiceNumber={invoiceNumber}
-            />
-          </FitInvoicePage>
+          <InvoiceDesignPreview
+            design={value}
+            logoUrl={logoUrl}
+            businessName={businessName}
+            items={previewItems}
+            currency={currency}
+            clientName={clientName}
+            invoiceNumber={invoiceNumber}
+          />
         </div>
       )}
     </div>

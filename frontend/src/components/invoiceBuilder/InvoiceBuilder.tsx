@@ -55,7 +55,6 @@ import { RichTextEditor } from "@/components/ui/richText";
 import { PdfFrame } from "@/components/PdfFrame";
 import { InvoiceDesignEditor } from "@/components/invoiceDesign/InvoiceDesignEditor";
 import { InvoiceDesignPreview, type EditablePreviewField, type InvoicePreviewEditor } from "@/components/invoiceDesign/InvoiceDesignPreview";
-import { FitInvoicePage } from "@/components/invoiceDesign/FitInvoicePage";
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
@@ -215,8 +214,6 @@ export default function InvoiceBuilder() {
   const businessName = builder.businessName || selectedBrand?.businessName || selectedBrand?.name || "Your Company";
   const contactLine = [selectedBrand?.email, selectedBrand?.phone, selectedBrand?.website].filter(Boolean).join("  ·  ");
   const footerText = selectedBrand?.pdfFooter?.trim() || `Thank you for your business. ${businessName}`;
-  const pageWidthMm = builder.paperSize === "LETTER" ? 215.9 : 210;
-  const pageLabel = builder.paperSize === "LETTER" ? "Letter · 215.9 × 279.4 mm" : "A4 · 210 × 297 mm";
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -570,19 +567,18 @@ export default function InvoiceBuilder() {
       </div>
       <div className="max-h-[calc(100vh-11.5rem)] overflow-y-auto bg-neutral-50 p-3 sm:p-4">
         {pdfMode === "live" ? (
-          <FitInvoicePage widthMm={pageWidthMm} className="mx-auto">
+          <div className="mx-auto w-full max-w-[210mm]">
             <InvoiceDesignPreview {...previewProps} className="!shadow-none" />
-          </FitInvoicePage>
+          </div>
         ) : pdfUrl ? (
-          <PdfFrame src={pdfUrl} paperSize={builder.paperSize} className="h-[calc(100vh-14rem)] min-h-[520px] border-0 bg-transparent" />
+          <PdfFrame src={pdfUrl} className="h-[calc(100vh-14rem)] min-h-[520px] border-0 bg-transparent" />
         ) : (
           <div className="flex h-[520px] items-center justify-center"><Spinner /></div>
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-1 border-t border-border bg-card px-4 py-2 text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between border-t border-border bg-card px-4 py-2 text-[10px] text-muted-foreground">
         <span>{pdfMode === "live" ? "Instant document preview" : "Exact paginated PDF, auto-refreshed"}</span>
-        <span className="font-medium text-foreground/70">{pageLabel}</span>
-        <span className="hidden sm:inline">Internal notes are never printed</span>
+        <span>Internal notes are never printed</span>
       </div>
     </div>
   );
@@ -591,7 +587,7 @@ export default function InvoiceBuilder() {
     <div className="min-h-screen bg-background">
       {/* -------------------------- TOP ACTIONS -------------------------- */}
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2.5 lg:px-6">
           <Button type="button" variant="ghost" size="sm" onClick={() => (dirty ? setCancelOpen(true) : navigate("/dashboard/invoices"))}>
             <ArrowLeft className="size-4" /> <span className="hidden sm:inline">Back</span>
           </Button>
@@ -610,24 +606,24 @@ export default function InvoiceBuilder() {
             </span>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            <Button type="button" variant="outline" size="sm" onClick={openPdfPreview} loading={pdfGenerating} aria-label="PDF preview">
-              <FileText className="size-3.5" /> <span className="hidden sm:inline">PDF</span>
+            <Button type="button" variant="outline" size="sm" onClick={openPdfPreview} loading={pdfGenerating}>
+              <FileText className="size-3.5" /> PDF
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setExpandOpen(true)} aria-label="Preview invoice">
-              <Eye className="size-3.5" /> <span className="hidden sm:inline">Preview</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => setExpandOpen(true)}>
+              <Eye className="size-3.5" /> Preview
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => void save(false)} loading={submitting} aria-label="Save invoice">
-              <Check className="size-3.5" /> <span className="hidden sm:inline">Save Invoice</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void save(false)} loading={submitting}>
+              <Check className="size-3.5" /> Save Invoice
             </Button>
-            <Button type="button" size="sm" onClick={() => void save(true)} loading={submitting || sending} disabled={savedInvoice?.status === "PAID"} aria-label="Send invoice">
-              <Send className="size-3.5" /> <span className="hidden sm:inline">Send Invoice</span>
+            <Button type="button" size="sm" onClick={() => void save(true)} loading={submitting || sending} disabled={savedInvoice?.status === "PAID"}>
+              <Send className="size-3.5" /> Send Invoice
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1800px] px-3 py-4 sm:px-4 lg:px-6">
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,830px)]">
+      <main className="mx-auto w-full max-w-[1600px] px-4 py-4 lg:px-6">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,560px)]">
           {/* -------------------------- EDITOR -------------------------- */}
           <div className="min-w-0 space-y-4">
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
@@ -959,15 +955,13 @@ export default function InvoiceBuilder() {
           <Button type="button" variant="outline" size="sm" className="absolute right-2 top-2 z-10" onClick={() => void pdfFrameRef.current?.requestFullscreen?.()}>
             <Maximize2 className="size-3.5" /> Full screen
           </Button>
-          {pdfUrl ? <PdfFrame src={pdfUrl} paperSize={builder.paperSize} className="h-[75vh]" /> : <Spinner />}
+          {pdfUrl ? <PdfFrame src={pdfUrl} className="h-[75vh]" /> : <Spinner />}
         </div>
       </Dialog>
 
       <Dialog open={expandOpen} onClose={() => setExpandOpen(false)} title="Invoice preview" description="How the invoice looks to your customer." className="max-w-5xl">
-        <div className="max-h-[75vh] overflow-auto bg-neutral-50 p-2 sm:p-4">
-          <FitInvoicePage widthMm={pageWidthMm} className="mx-auto">
-            <InvoiceDesignPreview {...previewProps} />
-          </FitInvoicePage>
+        <div className="max-h-[75vh] overflow-y-auto bg-neutral-50 p-4">
+          <InvoiceDesignPreview {...previewProps} />
         </div>
       </Dialog>
 
