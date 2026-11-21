@@ -203,3 +203,37 @@ export interface Paginated<T> {
   data: T[];
   meta: { page: number; limit: number; total: number; pages: number };
 }
+
+export interface CurrencyTotal {
+  currency: string;
+  amount: number;
+}
+
+/** Currency-safe stats for the currently filtered invoice list. */
+export interface InvoiceSummary {
+  totalInvoices: number;
+  totalInvoiced: CurrencyTotal[];
+  totalPaid: CurrencyTotal[];
+  totalOutstanding: CurrencyTotal[];
+  totalOverdue: CurrencyTotal[];
+  draftInvoices: number;
+  draftAmount: CurrencyTotal[];
+}
+
+export interface InvoiceListResponse extends Paginated<Invoice> {
+  summary?: InvoiceSummary;
+}
+
+export interface BulkSendResult {
+  id: string;
+  number?: string;
+  ok: boolean;
+  error?: string;
+  status?: string;
+}
+
+export interface BulkSendResponse {
+  sent: number;
+  failed: number;
+  results: BulkSendResult[];
+}

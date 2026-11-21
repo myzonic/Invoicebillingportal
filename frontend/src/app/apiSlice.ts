@@ -3,10 +3,12 @@ import { refreshAccessToken, tokenStore } from "@/lib/api";
 import type {
   AuditLog,
   Brand,
+  BulkSendResponse,
   Client,
   CurrencyRates,
   DashboardReport,
   Invoice,
+  InvoiceListResponse,
   InvoiceLog,
   Merchant,
   Paginated,
@@ -51,6 +53,16 @@ export interface ListQuery {
   clientId?: string;
   brandId?: string;
   module?: string;
+  // Invoice listing extensions. Other list endpoints simply ignore these.
+  currency?: string;
+  issueDateFrom?: string;
+  issueDateTo?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+  amountMin?: number;
+  amountMax?: number;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
 }
 
 function listParams(query: ListQuery) {
@@ -62,6 +74,15 @@ function listParams(query: ListQuery) {
   if (query.clientId) params.set("clientId", query.clientId);
   if (query.brandId) params.set("brandId", query.brandId);
   if (query.module) params.set("module", query.module);
+  if (query.currency) params.set("currency", query.currency);
+  if (query.issueDateFrom) params.set("issueDateFrom", query.issueDateFrom);
+  if (query.issueDateTo) params.set("issueDateTo", query.issueDateTo);
+  if (query.dueDateFrom) params.set("dueDateFrom", query.dueDateFrom);
+  if (query.dueDateTo) params.set("dueDateTo", query.dueDateTo);
+  if (query.amountMin !== undefined) params.set("amountMin", String(query.amountMin));
+  if (query.amountMax !== undefined) params.set("amountMax", String(query.amountMax));
+  if (query.sortBy) params.set("sortBy", query.sortBy);
+  if (query.sortDir) params.set("sortDir", query.sortDir);
   return params.toString();
 }
 
@@ -125,7 +146,7 @@ export const apiSlice = createApi({
     }),
 
     // ---- Invoices ----
-    invoices: builder.query<Paginated<Invoice>, ListQuery>({
+    invoices: builder.query<InvoiceListResponse, ListQuery>({
       query: (q) => `/invoices?${listParams(q)}`,
       providesTags: ["Invoice"],
     }),
@@ -152,6 +173,18 @@ export const apiSlice = createApi({
     sendInvoice: builder.mutation<{ success: boolean }, string>({
       query: (id) => ({ url: `/invoices/${id}/send`, method: "POST" }),
       invalidatesTags: ["Invoice", "InvoiceLog"],
+    }),
+    bulkSendInvoices: builder.mutation<{ data: BulkSendResponse }, { ids: string[] }>({
+      query: (body) => ({ url: "/invoices/bulk/send", method: "POST", body }),
+      invalidatesTags: ["Invoice", "InvoiceLog", "Dashboard"],
+    }),
+    exportInvoices: builder.mutation<Blob, { ids: string[] }>({
+      query: (body) => ({
+        url: "/invoices/bulk/export",
+        method: "POST",
+        body,
+        responseHandler: (response) => response.blob(),
+      }),
     }),
     invoiceCheckout: builder.mutation<{ data: { url: string } }, string>({
       query: (id) => ({ url: `/payments/checkout/${id}`, method: "POST" }),
@@ -312,6 +345,8 @@ export const {
   useDeleteInvoiceMutation,
   useUpdateInvoiceStatusMutation,
   useSendInvoiceMutation,
+  useBulkSendInvoicesMutation,
+  useExportInvoicesMutation,
   useInvoiceCheckoutMutation,
   useCreatePaymentQuoteMutation,
   usePublicInvoiceQuery,
