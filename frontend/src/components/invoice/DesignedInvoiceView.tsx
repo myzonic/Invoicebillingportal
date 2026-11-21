@@ -1,6 +1,7 @@
 import type { InvoiceDesign } from "@/types";
 import { mixHex, tint } from "@/lib/invoiceDesign";
 import { InvoiceDesignPreview, type PreviewItem } from "@/components/invoiceDesign/InvoiceDesignPreview";
+import { FitInvoicePage } from "@/components/invoiceDesign/FitInvoicePage";
 import { formatDate, rgba, statusLabel } from "@/lib/utils";
 import { ArrowRight, FileText, Lock } from "lucide-react";
 import { branding } from "@/config/branding";
@@ -73,7 +74,7 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
 
   return (
     <div
-      className="relative flex min-h-screen items-center justify-center overflow-hidden p-4"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden p-2 sm:p-4"
       style={{ background: `linear-gradient(135deg, ${tint(design.colors.supporting, 0.96)} 0%, ${tint(design.colors.supporting, 0.88)} 55%, ${tint(design.colors.accent, 0.9)} 100%)` }}
     >
       <div
@@ -83,7 +84,8 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
           backgroundSize: "44px 44px",
         }}
       />
-      <div className="relative w-full max-w-[820px]">
+      <div className="relative w-full max-w-[860px]">
+        <FitInvoicePage widthMm={builder?.paperSize === "LETTER" ? 215.9 : 210} className="mx-auto">
         <InvoiceDesignPreview
           design={design}
           paperSize={builder?.paperSize}
@@ -113,6 +115,7 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
           terms={builder?.terms || undefined}
           className="!rounded-2xl !shadow-2xl"
         />
+        </FitInvoicePage>
 
         <div
           className="mt-4 space-y-3 rounded-2xl border bg-card p-5 shadow-sm"

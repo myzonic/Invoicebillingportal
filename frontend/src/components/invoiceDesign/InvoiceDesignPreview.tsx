@@ -257,7 +257,7 @@ export function InvoiceDesignPreview({
   const pageStyle: React.CSSProperties = {
     width: paperSize === "LETTER" ? "215.9mm" : "210mm",
     minHeight: paperSize === "LETTER" ? "279.4mm" : "297mm",
-    maxWidth: "100%",
+    flexShrink: 0,
     boxSizing: "border-box",
   };
 
@@ -620,7 +620,7 @@ function LegacyInvoicePreview({
       style={{
         width: paperSize === "LETTER" ? "215.9mm" : "210mm",
         minHeight: paperSize === "LETTER" ? "279.4mm" : "297mm",
-        maxWidth: "100%",
+        flexShrink: 0,
         boxSizing: "border-box",
         fontSize: 11,
       }}

@@ -66,7 +66,7 @@ export default function PaymentLink() {
 
   return (
     <div
-      className="relative flex min-h-screen items-center justify-center overflow-hidden p-4"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden p-2 sm:p-4"
       style={{ background: `linear-gradient(135deg, ${shade(accent, 0.97)} 0%, ${shade(accent, 0.9)} 50%, ${shade(accent, 0.82)} 100%)` }}
     >
       <div
@@ -84,10 +84,10 @@ export default function PaymentLink() {
       />
 
       <Card
-        className="relative w-full max-w-[794px] border bg-white/95 text-neutral-900 backdrop-blur-xl"
+        className="relative w-full max-w-[860px] border bg-white/95 text-neutral-900 backdrop-blur-xl"
         style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(accent, 0.5)}` }}
       >
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           <div className="mb-4 flex justify-center">
             <div
               className="flex size-20 items-center justify-center overflow-hidden rounded-2xl"
@@ -133,7 +133,7 @@ export default function PaymentLink() {
             <span className="font-medium text-neutral-900">{inv.currency}</span> • due {formatDate(inv.dueDate)}
           </p>
 
-          <div className="mb-6 overflow-hidden rounded-xl border" style={{ borderColor: rgba(accent, 0.5) }}>
+          <div className="mb-6 overflow-x-auto rounded-xl border" style={{ borderColor: rgba(accent, 0.5) }}>
             <table className="w-full text-sm">
               <thead>
                 <tr
