@@ -402,6 +402,9 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
   const logoX = margin;
   const logoY = height - bandH + (bandH - logoH) / 2;
   if (logo) {
+    // Plain white backdrop behind the image (no border/chip) so transparent
+    // PNGs and opaque JPEGs both print on white.
+    page.drawRectangle({ x: logoX, y: logoY, width: logoW, height: logoH, color: col(WHITE) });
     page.drawImage(logo, { x: logoX, y: logoY, width: logoW, height: logoH });
   }
 
@@ -668,6 +671,9 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const logoX = margin;
   const logoY = topY + (bandH - logoH) / 2;
   if (logo) {
+    // Plain white backdrop behind the image (no border/chip) so transparent
+    // PNGs and opaque JPEGs both print on white.
+    page.drawRectangle({ x: logoX, y: logoY, width: logoW, height: logoH, color: col(WHITE) });
     page.drawImage(logo, { x: logoX, y: logoY, width: logoW, height: logoH });
   }
 

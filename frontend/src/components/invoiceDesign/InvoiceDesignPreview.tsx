@@ -543,7 +543,7 @@ function HeaderContent({
   return (
     <div className="relative flex items-start justify-between gap-4">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-[42px] w-[84px] shrink-0 items-center justify-center">
+        <div className="flex h-[42px] w-[84px] shrink-0 items-center justify-center bg-white">
           <Logo src={logoUrl} alt={businessName} className="max-h-full max-w-full object-contain" />
         </div>
         <div className="min-w-0">
@@ -605,7 +605,7 @@ function LegacyInvoicePreview({
     <div className={`overflow-hidden rounded-lg border border-neutral-800 bg-white text-left shadow-sm ${className}`} style={{ fontSize: 11 }}>
       <div className="flex items-center justify-between px-5 py-4" style={{ background: "#111111" }}>
         <div className="flex items-center gap-3">
-          <div className="flex h-[42px] w-[84px] items-center justify-center">
+          <div className="flex h-[42px] w-[84px] items-center justify-center bg-white">
             <Logo src={logoUrl} alt={businessName} className="max-h-full max-w-full object-contain" />
           </div>
           <div>
