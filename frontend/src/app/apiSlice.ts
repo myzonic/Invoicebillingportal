@@ -166,10 +166,6 @@ export const apiSlice = createApi({
       query: (id) => ({ url: `/invoices/${id}`, method: "DELETE" }),
       invalidatesTags: ["Invoice", "Dashboard"],
     }),
-    updateInvoiceStatus: builder.mutation<{ data: Invoice }, { id: string; status: string }>({
-      query: ({ id, status }) => ({ url: `/invoices/${id}/status`, method: "PATCH", body: { status } }),
-      invalidatesTags: ["Invoice", "Dashboard"],
-    }),
     sendInvoice: builder.mutation<{ success: boolean }, string>({
       query: (id) => ({ url: `/invoices/${id}/send`, method: "POST" }),
       invalidatesTags: ["Invoice", "InvoiceLog"],
@@ -343,7 +339,6 @@ export const {
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
-  useUpdateInvoiceStatusMutation,
   useSendInvoiceMutation,
   useBulkSendInvoicesMutation,
   useExportInvoicesMutation,

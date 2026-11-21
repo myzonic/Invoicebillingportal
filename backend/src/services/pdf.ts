@@ -4,6 +4,8 @@ import { PDFDocument, PDFImage, PDFFont, StandardFonts, rgb } from "pdf-lib";
 import { Invoice, Client, Brand } from "@prisma/client";
 import { env } from "../config/env";
 import { resolveInvoiceDesign, InvoiceDesign } from "./invoiceDesign";
+import { effectiveInvoiceStatus, statusLabel } from "./invoiceStatus";
+import { normalizeBuilderData, type BuilderData } from "./invoiceBuilder";
 
 export interface InvoicePdfData {
   invoice: Invoice;
@@ -26,6 +28,59 @@ function money(value: number | string | { toNumber: () => number }, currency: st
   const symbol = CURRENCY_SYMBOLS[currency.toUpperCase()] ?? `${currency} `;
   const number = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
   return `${symbol}${number}`;
+}
+
+/** PDF status label, including read-time Overdue calculation. SENT prints as ACTIVE. */
+function invoiceStatusText(invoice: Invoice): string {
+  const payments = ((invoice as Invoice & { payments?: unknown[] }).payments || []) as Parameters<typeof effectiveInvoiceStatus>[1];
+  return statusLabel(effectiveInvoiceStatus(invoice, payments));
+}
+
+const A4_SIZE: [number, number] = [595.28, 841.89];
+const LETTER_SIZE: [number, number] = [612, 792];
+
+/** Item amount after its own line discount. */
+function itemNet(item: { quantity: number; unitPrice: number; discount?: number }): number {
+  return Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount || 0));
+}
+
+/** Insert Shipping before the final TOTAL row when present. */
+function withShipping(rows: Array<[string, string, boolean]>, builder: BuilderData, currency: string) {
+  if (builder.shipping > 0) rows.splice(rows.length - 1, 0, ["Shipping", money(builder.shipping, currency), false]);
+  return rows;
+}
+
+function pageSize(invoice: Invoice): [number, number] {
+  return normalizeBuilderData((invoice as Invoice & { builderData?: unknown }).builderData).paperSize === "LETTER"
+    ? LETTER_SIZE
+    : A4_SIZE;
+}
+
+/** Typography choice from the builder; defaults to the original Helvetica. */
+function fontSet(invoice: Invoice) {
+  const kind = normalizeBuilderData((invoice as Invoice & { builderData?: unknown }).builderData).typography;
+  if (kind === "serif") {
+    return {
+      regular: StandardFonts.TimesRoman,
+      bold: StandardFonts.TimesRomanBold,
+      italic: StandardFonts.TimesRomanItalic,
+      boldItalic: StandardFonts.TimesRomanBoldItalic,
+    };
+  }
+  if (kind === "mono") {
+    return {
+      regular: StandardFonts.Courier,
+      bold: StandardFonts.CourierBold,
+      italic: StandardFonts.CourierOblique,
+      boldItalic: StandardFonts.CourierBoldOblique,
+    };
+  }
+  return {
+    regular: StandardFonts.Helvetica,
+    bold: StandardFonts.HelveticaBold,
+    italic: StandardFonts.HelveticaOblique,
+    boldItalic: StandardFonts.HelveticaBoldOblique,
+  };
 }
 
 /** Wrap text into lines that fit within maxWidth (word-level breaking). */
@@ -298,12 +353,14 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
 
   const { invoice, client, brand, company } = data;
   const doc = await PDFDocument.create();
-  // ISO A4 page size in PDF points (210 x 297 mm).
-  const page = doc.addPage([595.28, 841.89]);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
-  const boldItalic = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+  // Page size and typography come from additive builder data; A4/Helvetica by default.
+  const page = doc.addPage(pageSize(invoice));
+  const fonts = fontSet(invoice);
+  const font = await doc.embedFont(fonts.regular);
+  const bold = await doc.embedFont(fonts.bold);
+  const italic = await doc.embedFont(fonts.italic);
+  const boldItalic = await doc.embedFont(fonts.boldItalic);
+  const builder = normalizeBuilderData((invoice as Invoice & { builderData?: unknown }).builderData);
   const accentSource = brand?.color || invoice.color;
   const accentMid = accentSource ? hexToC(accentSource) : GOLD_MID;
   const accentLight = lighten(accentMid, 0.45);
@@ -381,7 +438,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
   const meta = [
     ["Issue date", invoice.issueDate.toISOString().slice(0, 10)],
     ["Due date", invoice.dueDate ? invoice.dueDate.toISOString().slice(0, 10) : "-"],
-    ["Status", invoice.status],
+    ["Status", invoiceStatusText(invoice)],
   ];
   meta.forEach(([k, v], i) => {
     const yy = metaTop - 16 - i * 15;
@@ -411,7 +468,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
   items.forEach((item) => {
     rightText(String(item.quantity), colRight[1], y - 15, font, 9.5, INK);
     rightText(money(item.unitPrice, invoice.currency), colRight[2], y - 15, font, 9.5, INK);
-    rightText(money(item.quantity * item.unitPrice, invoice.currency), colRight[3], y - 15, font, 9.5, INK);
+    rightText(money(itemNet(item), invoice.currency), colRight[3], y - 15, font, 9.5, INK);
 
     const blocks = parseRich(item.description);
     let linesDrawn = 0;
@@ -451,6 +508,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
     totalRows.push([`Discount`, `- ${money(invoice.discountAmount, invoice.currency)}`, false]);
   }
   totalRows.push(["TOTAL", money(invoice.total, invoice.currency), true]);
+  withShipping(totalRows, builder, invoice.currency);
 
   for (const [k, v, isTotal] of totalRows) {
     if (isTotal) {
@@ -473,6 +531,22 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Uint8Array
     text("NOTES", margin, y, bold, 8, GRAY);
     y -= 15;
     text(invoice.notes, margin, y, font, 9.5, GRAY);
+  }
+
+  // Customer-facing builder fields. Internal notes are NEVER printed.
+  const extraSections: Array<[string, string]> = [
+    ["PAYMENT TERMS", builder.paymentTerms],
+    ["PAYMENT INSTRUCTIONS", builder.paymentInstructions],
+    ["TERMS & CONDITIONS", builder.terms],
+  ];
+  for (const [label, value] of extraSections) {
+    if (!value.trim()) continue;
+    const lines = wrapText(value, width - margin * 2 - 10, font, 9);
+    y -= 12;
+    text(label, margin, y, bold, 8, GRAY);
+    y -= 14;
+    lines.slice(0, 4).forEach((l, i) => text(l, margin, y - i * 12, font, 9, GRAY));
+    y -= 12 * Math.min(4, lines.length);
   }
 
   // ===================== Footer band =====================
@@ -509,11 +583,12 @@ interface DesignedPdfInput extends InvoicePdfData {
  */
 async function renderDesignedInvoicePdf({ invoice, client, brand, company, design }: DesignedPdfInput): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  let page = doc.addPage([595.28, 841.89]);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
-  const boldItalic = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+  let page = doc.addPage(pageSize(invoice));
+  const fonts = fontSet(invoice);
+  const font = await doc.embedFont(fonts.regular);
+  const bold = await doc.embedFont(fonts.bold);
+  const italic = await doc.embedFont(fonts.italic);
+  const boldItalic = await doc.embedFont(fonts.boldItalic);
 
   const mix = (a: C, b: C, t: number): C => ({
     r: a.r + (b.r - a.r) * t,
@@ -529,6 +604,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const muted: C = { r: 0.38, g: 0.42, b: 0.48 };
   const line: C = mix(primary, WHITE, 0.86);
   const softFill: C = mix(supporting, WHITE, 0.55);
+  const builder = normalizeBuilderData((invoice as Invoice & { builderData?: unknown }).builderData);
   const headerDark = design.layout === "corporate" || design.layout === "premium";
   const compact = design.layout === "compact";
   const minimal = design.layout === "minimal";
@@ -646,7 +722,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   const meta: Array<[string, string]> = [
     ["Issue date", invoice.issueDate.toISOString().slice(0, 10)],
     ["Due date", invoice.dueDate ? invoice.dueDate.toISOString().slice(0, 10) : "-"],
-    ["Status", invoice.status.replace("_", " ")],
+    ["Status", invoiceStatusText(invoice)],
     ["Currency", invoice.currency],
   ];
   meta.forEach(([k, v], i) => {
@@ -675,7 +751,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   /** Starts a fresh page when the current one runs out of room. */
   const ensureSpace = (needed: number, repeatHeader = true) => {
     if (y - needed >= 92) return;
-    page = doc.addPage([595.28, 841.89]);
+    page = doc.addPage(pageSize(invoice));
     y = height - 60;
     if (!repeatHeader) return;
     page.drawRectangle({ x: margin, y: y - headH, width: right - margin, height: headH, color: col(tableHeaderFill) });
@@ -708,7 +784,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
 
     rightText(String(item.quantity), colRight[1], y - 15, font, 9.5, ink);
     rightText(money(item.unitPrice, invoice.currency), colRight[2], y - 15, font, 9.5, ink);
-    rightText(money(item.quantity * item.unitPrice, invoice.currency), colRight[3], y - 15, font, 9.5, ink);
+    rightText(money(itemNet(item), invoice.currency), colRight[3], y - 15, font, 9.5, ink);
 
     displayLines.forEach((lineItem, li) => {
       const prefixW = lineItem.prefix ? font.widthOfTextAtSize(lineItem.prefix, 9.5) : 0;
@@ -741,6 +817,7 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
   ];
   if (Number(invoice.discountAmount) > 0) totalRows.push(["Discount", `- ${money(invoice.discountAmount, invoice.currency)}`, false]);
   totalRows.push(["TOTAL", money(invoice.total, invoice.currency), true]);
+  withShipping(totalRows, builder, invoice.currency);
 
   for (const [k, v, isTotal] of totalRows) {
     if (isTotal) {
@@ -772,6 +849,23 @@ async function renderDesignedInvoicePdf({ invoice, client, brand, company, desig
     y -= 15;
     const noteLines = wrapText(invoice.notes, right - margin - 40, font, 9.5);
     noteLines.slice(0, 4).forEach((lineText, i) => text(lineText, margin, y - i * 13, font, 9.5, muted));
+  }
+
+  // Customer-facing builder fields. Internal notes are NEVER printed.
+  const extraSections: Array<[string, string]> = [
+    ["PAYMENT TERMS", builder.paymentTerms],
+    ["PAYMENT INSTRUCTIONS", builder.paymentInstructions],
+    ["TERMS & CONDITIONS", builder.terms],
+  ];
+  for (const [label, value] of extraSections) {
+    if (!value.trim()) continue;
+    ensureSpace(80, false);
+    const lines = wrapText(value, width - margin * 2 - 10, font, 9);
+    y -= 12;
+    text(label, margin, y, bold, 8, secondary);
+    y -= 14;
+    lines.slice(0, 5).forEach((l, i) => text(l, margin, y - i * 12, font, 9, muted));
+    y -= 12 * Math.min(5, lines.length);
   }
 
   // ===================== Footer =====================

@@ -111,11 +111,32 @@ export interface Merchant {
   createdAt: string;
 }
 
+export interface BuilderData {
+  shipping: number;
+  paymentTerms: string;
+  paymentInstructions: string;
+  internalNotes: string;
+  terms: string;
+  depositRequired: boolean;
+  paperSize: "A4" | "LETTER";
+  typography: "sans" | "serif" | "mono";
+  attachments: Array<{ name: string; url: string }>;
+  customerCompany: string;
+  customerTaxId: string;
+  billingAddress: string;
+  shippingAddress: string;
+}
+
 export interface InvoiceItem {
+  id?: string;
   description: string;
   quantity: number;
   unitPrice: number;
   amount?: number;
+  /** Builder extras — stored in the items JSON; absent on historical invoices. */
+  discount?: number;
+  taxRate?: number;
+  notes?: string;
 }
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "CANCELLED";
@@ -140,7 +161,10 @@ export interface Invoice {
   color?: string | null;
   /** Optional invoice-level design override; never mutates the brand defaults. */
   designOverride?: InvoiceDesign | null;
+  builderData?: BuilderData | null;
   status: InvoiceStatus;
+  /** Read-time status including calculated Overdue; provided by the API. */
+  displayStatus?: InvoiceStatus;
   notes?: string;
   issueDate: string;
   dueDate?: string;

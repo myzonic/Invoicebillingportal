@@ -9,7 +9,6 @@ import {
   useRatesQuery,
   useSendInvoiceMutation,
   useUpdateInvoiceMutation,
-  useUpdateInvoiceStatusMutation,
 } from "@/app/apiSlice";
 import { useCan } from "@/lib/permissions";
 import { api } from "@/lib/api";
@@ -36,7 +35,6 @@ export default function InvoiceDetail() {
   const { data, isLoading } = useInvoiceQuery(id);
   const { data: ratesData } = useRatesQuery();
   const currencyOptions = ratesData?.data?.currencies?.length ? ratesData.data.currencies : CURRENCIES;
-  const [updateStatus, { isLoading: updating }] = useUpdateInvoiceStatusMutation();
   const [sendInvoice, { isLoading: sending }] = useSendInvoiceMutation();
   const [checkout, { isLoading: creatingLink }] = useInvoiceCheckoutMutation();
   const [deleteInvoice, { isLoading: deleting }] = useDeleteInvoiceMutation();
@@ -125,15 +123,6 @@ export default function InvoiceDetail() {
       await updateInvoice({ id, body: pdfPayload() }).unwrap();
       toast.success("PDF content saved and regenerated");
       await loadSavedPreview();
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
-
-  const markPaid = async () => {
-    try {
-      await updateStatus({ id, status: "PAID" }).unwrap();
-      toast.success("Invoice marked as paid");
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -246,11 +235,6 @@ export default function InvoiceDetail() {
                 </Button>
               </>
             )}
-            {can("update") && invoice.status !== "PAID" && (
-              <Button variant="success" onClick={markPaid} loading={updating}>
-                <CheckCircle2 className="size-4" /> Mark paid
-              </Button>
-            )}
             {can("delete") && invoice.status !== "PAID" && (
               <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
                 <Trash2 className="size-4" /> Delete
@@ -280,7 +264,7 @@ export default function InvoiceDetail() {
           </div>
           <div>
             <p className="text-muted-foreground">Status</p>
-            <StatusBadge status={invoice.status} />
+            <StatusBadge status={invoice.displayStatus || invoice.status} />
           </div>
           <div>
             <p className="text-muted-foreground">Currency</p>

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { env } from "../src/config/env";
 import { prisma } from "../src/lib/prisma";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { syncInvoiceStatus } from "../src/services/invoiceStatus";
 
 const SQUARE_API = env.square.environment === "production"
   ? "https://connect.squareup.com"
@@ -76,10 +77,6 @@ async function main() {
     throw new Error(`Payment not completed: status=${payment.status}`);
   }
 
-  await prisma.invoice.update({
-    where: { id: invoice.id },
-    data: { status: "PAID", paidAt: new Date() },
-  });
   await prisma.payment.upsert({
     where: { id: (await prisma.payment.findFirst({ where: { invoiceId: invoice.id } }))?.id || "none" },
     update: { status: PaymentStatus.SUCCEEDED, reference: payment.id, capturedAt: new Date() },
@@ -93,6 +90,7 @@ async function main() {
       capturedAt: new Date(),
     },
   });
+  await syncInvoiceStatus(invoice.id);
 
   console.log(`PAYMENT COMPLETED: ${payment.id}`);
   console.log(`Receipt: ${payment.receipt_url || "n/a"}`);

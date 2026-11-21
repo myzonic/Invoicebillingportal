@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { InvoiceStatus, LogAction, PaymentMethod, PaymentStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { getOrderReferenceId, verifyWebhookSignature } from "../../services/square";
+import { syncInvoiceStatus } from "../../services/invoiceStatus";
 import { audit } from "../../utils/audit";
 
 const router = Router();
@@ -67,18 +68,18 @@ async function handleCompletedPayment(paymentId: string, orderId?: string) {
   if (!invoiceId) return;
 
   const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
-  if (!invoice || invoice.status === InvoiceStatus.PAID) return;
+  if (!invoice || invoice.status === InvoiceStatus.CANCELLED) return;
 
-  await prisma.$transaction([
-    prisma.invoice.update({
-      where: { id: invoiceId },
-      data: { status: InvoiceStatus.PAID, paidAt: new Date() },
-    }),
-    prisma.payment.updateMany({
-      where: { invoiceId, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.SUCCEEDED, reference: paymentId, capturedAt: new Date() },
-    }),
-  ]);
+  // Verified, COMPLETED payments only. Pending/failed/abandoned events never
+  // reach here, and refund events are ignored entirely.
+  await prisma.payment.updateMany({
+    where: { invoiceId, status: PaymentStatus.PENDING },
+    data: { status: PaymentStatus.SUCCEEDED, reference: paymentId, capturedAt: new Date() },
+  });
+
+  // Re-derive from all successful payments: full -> Paid, partial -> Partially
+  // paid, refunded payments are excluded from the paid amount.
+  await syncInvoiceStatus(invoiceId);
 
   await audit({
     module: "payments",

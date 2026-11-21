@@ -1,12 +1,13 @@
 import type { InvoiceDesign, InvoiceLayout } from "@/types";
 import { mixHex } from "@/lib/invoiceDesign";
-import { money, richText } from "@/lib/utils";
+import { money, richText, statusLabel } from "@/lib/utils";
 import Logo from "@/components/Logo";
 
 export interface PreviewItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  discount?: number;
 }
 
 interface PreviewProps {
@@ -24,6 +25,16 @@ interface PreviewProps {
   contactLine?: string;
   footerText?: string;
   className?: string;
+  /** Real values supplied by the builder make the preview match the PDF. */
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  totalAmount?: number;
+  shipping?: number;
+  customerEmail?: string;
+  customerAddress?: string;
+  paymentInstructions?: string;
+  terms?: string;
 }
 
 const DEFAULT_ITEMS: PreviewItem[] = [
@@ -73,11 +84,22 @@ export function InvoiceDesignPreview({
   notes = "Payment is due within 14 days. Late payments may incur a 2% monthly fee.",
   contactLine = "hello@acmestudio.com  ·  +1 (555) 010 2233  ·  acmestudio.com",
   footerText = "Thank you for your business.",
+  subtotal,
+  taxAmount,
+  discountAmount = 0,
+  totalAmount,
+  shipping = 0,
+  customerEmail,
+  customerAddress,
+  paymentInstructions,
+  terms,
   className = "",
 }: PreviewProps) {
   const t = tones(design);
   const layout = design.layout;
-  const subtotal = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
+  const calcSubtotal = subtotal ?? items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
+  const calcTax = taxAmount ?? calcSubtotal * 0.1;
+  const calcTotal = totalAmount ?? Math.max(0, calcSubtotal + calcTax - Number(discountAmount) + Number(shipping));
   const totalPanelBg = t.headerDark ? t.primary : mixHex(t.accent, "#ffffff", 0.86);
   const totalPanelText = t.headerDark ? "#ffffff" : t.primary;
 
@@ -127,10 +149,9 @@ export function InvoiceDesignPreview({
           <div className="mt-1 font-semibold" style={{ fontSize: 13, color: t.ink }}>
             {clientName}
           </div>
-          <div className="mt-0.5" style={{ color: t.muted, fontSize: 10 }}>
-            accounts@northwindlabs.co
-          </div>
-          <div style={{ color: t.muted, fontSize: 10 }}>48 Harbour Road, Sydney NSW</div>
+          <div className="mt-0.5 whitespace-pre-line" style={{ color: t.muted, fontSize: 10 }}>
+              {[customerEmail || "accounts@northwindlabs.co", customerAddress || "48 Harbour Road, Sydney NSW"].filter(Boolean).join("\n")}
+            </div>
         </div>
         <div>
           <div className="text-right" style={labelStyle}>
@@ -140,7 +161,7 @@ export function InvoiceDesignPreview({
             {[
               ["Issue date", issueDate],
               ["Due date", dueDate],
-              ["Status", status.replace("_", " ")],
+              ["Status", statusLabel(status)],
               ["Currency", currency],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3" style={{ fontSize: 10 }}>
@@ -199,7 +220,7 @@ export function InvoiceDesignPreview({
               {money(item.unitPrice, currency)}
             </div>
             <div className="text-right" style={{ fontSize: 10, fontWeight: 600, color: t.ink }}>
-              {money(item.quantity * item.unitPrice, currency)}
+              {money(item.quantity * item.unitPrice - Number(item.discount || 0), currency)}
             </div>
           </div>
         ))}
@@ -212,17 +233,40 @@ export function InvoiceDesignPreview({
           <p className="mt-1 max-w-[240px]" style={{ fontSize: 9.5, color: t.muted, lineHeight: 1.5 }}>
             {notes}
           </p>
+          {paymentInstructions && (
+            <p className="mt-1 max-w-[240px] whitespace-pre-line" style={{ fontSize: 9, color: t.muted }}>
+              <span style={{ fontWeight: 700, color: t.secondary }}>Payment instructions: </span>
+              {paymentInstructions}
+            </p>
+          )}
+          {terms && (
+            <p className="mt-1 max-w-[240px] whitespace-pre-line" style={{ fontSize: 8.5, color: t.muted }}>
+              {terms}
+            </p>
+          )}
         </div>
         <div>
           <div className="space-y-1 pb-2" style={{ fontSize: 10 }}>
             <div className="flex justify-between">
               <span style={{ color: t.muted }}>Subtotal</span>
-              <span style={{ color: t.ink }}>{money(subtotal, currency)}</span>
+              <span style={{ color: t.ink }}>{money(calcSubtotal, currency)}</span>
             </div>
             <div className="flex justify-between">
-              <span style={{ color: t.muted }}>Tax (10%)</span>
-              <span style={{ color: t.ink }}>{money(subtotal * 0.1, currency)}</span>
+              <span style={{ color: t.muted }}>Tax</span>
+              <span style={{ color: t.ink }}>{money(calcTax, currency)}</span>
             </div>
+            {Number(discountAmount) > 0 && (
+              <div className="flex justify-between">
+                <span style={{ color: t.muted }}>Discount</span>
+                <span style={{ color: t.ink }}>- {money(discountAmount, currency)}</span>
+              </div>
+            )}
+            {Number(shipping) > 0 && (
+              <div className="flex justify-between">
+                <span style={{ color: t.muted }}>Shipping</span>
+                <span style={{ color: t.ink }}>{money(shipping, currency)}</span>
+              </div>
+            )}
           </div>
           <div
             className="flex items-center justify-between px-3 py-2.5"
@@ -233,7 +277,7 @@ export function InvoiceDesignPreview({
             }}
           >
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Total</span>
-            <span style={{ fontSize: 15, fontWeight: 800 }}>{money(subtotal * 1.1, currency)}</span>
+            <span style={{ fontSize: 15, fontWeight: 800 }}>{money(calcTotal, currency)}</span>
           </div>
         </div>
       </div>

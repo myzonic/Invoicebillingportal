@@ -186,6 +186,9 @@ model Invoice {
   color           String?       // brand accent color shown on client-facing invoice/PDF
   // Optional invoice-level design override; never mutates the brand defaults.
   designOverride  Json?
+  // Additive builder-only document data (shipping, terms, internal notes, etc.).
+  // Existing invoices have NULL and keep their historical rendering.
+  builderData     Json?
   status          InvoiceStatus @default(DRAFT)
   notes           String?
   issueDate       DateTime

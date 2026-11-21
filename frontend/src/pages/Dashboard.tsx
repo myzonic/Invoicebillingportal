@@ -191,7 +191,7 @@ export default function Dashboard() {
                   <TD>{formatDate(inv.issueDate)}</TD>
                   <TD className="text-right font-medium">{money(inv.total, inv.currency)}</TD>
                   <TD>
-                    <StatusBadge status={inv.status} />
+                    <StatusBadge status={inv.displayStatus || inv.status} />
                   </TD>
                 </TR>
               ))}

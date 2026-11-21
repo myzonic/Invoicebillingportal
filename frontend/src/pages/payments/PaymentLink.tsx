@@ -1,12 +1,12 @@
 ﻿import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, FileText, Lock } from "lucide-react";
 import { usePublicInvoiceQuery } from "@/app/apiSlice";
-import { brandColor, formatDate, money, rgba, richText, shade } from "@/lib/utils";
+import { brandColor, formatDate, money, rgba, richText, shade, statusLabel } from "@/lib/utils";
 import { resolveInvoiceDesign } from "@/lib/invoiceDesign";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner, EmptyState } from "@/components/ui/table";
 import Logo from "@/components/Logo";
-import { DesignedInvoiceView } from "@/components/invoice/DesignedInvoiceView";
+import { DesignedInvoiceView, type DesignedInvoiceData } from "@/components/invoice/DesignedInvoiceView";
 import { branding } from "@/config/branding";
 
 export default function PaymentLink() {
@@ -44,6 +44,7 @@ export default function PaymentLink() {
           client: inv.client || null,
           brand: inv.brand || null,
           company: inv.company || { name: branding.defaultBrandName, email: "", phone: "", address: "", website: "" },
+          builderData: (inv as { builderData?: DesignedInvoiceData["builderData"] }).builderData || null,
         }}
         design={design}
         pdfUrl={`/api/payments/public/${inv.publicToken || id}/pdf`}
@@ -123,7 +124,7 @@ export default function PaymentLink() {
                 border: `1px solid ${shade(accent, -0.15)}`,
               }}
             >
-              {(inv.paymentState || inv.status || "").replace("_", " ")}
+              {statusLabel(inv.paymentState || inv.status)}
             </span>
           </div>
 

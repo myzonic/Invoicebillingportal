@@ -4,7 +4,7 @@ import { ArrowRight, CreditCard, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useCreatePaymentQuoteMutation, usePublicInvoiceQuery } from "@/app/apiSlice";
 import type { PaymentQuote } from "@/types";
-import { brandColor, formatDate, money, rgba, richText, shade } from "@/lib/utils";
+import { brandColor, formatDate, money, rgba, richText, shade, statusLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner, EmptyState } from "@/components/ui/table";
@@ -276,7 +276,7 @@ export default function SquareCheckout() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <span className="text-neutral-400">Status:</span>
-                  <span className="font-medium text-neutral-900">{inv.status?.replace("_", " ")}</span>
+                  <span className="font-medium text-neutral-900">{statusLabel(inv.status)}</span>
                 </div>
               </div>
             </div>

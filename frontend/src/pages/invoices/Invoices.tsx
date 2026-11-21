@@ -30,7 +30,7 @@ import {
 } from "@/app/apiSlice";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/permissions";
-import { cn, errorMessage, formatDate, money } from "@/lib/utils";
+import { cn, errorMessage, formatDate, money, statusLabel } from "@/lib/utils";
 import type { CurrencyTotal, Invoice } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -347,7 +347,7 @@ export default function Invoices() {
       case "status":
         return (
           <TD>
-            <StatusBadge status={invoice.status} />
+            <StatusBadge status={invoice.displayStatus || invoice.status} />
           </TD>
         );
     }
@@ -491,7 +491,7 @@ export default function Invoices() {
               <Select value={filters.status} onChange={(e) => updateFilters({ status: e.target.value })}>
                 {STATUSES.map((status) => (
                   <option key={status} value={status}>
-                    {status ? status.replace("_", " ").toLowerCase() : "All statuses"}
+                    {status ? statusLabel(status) : "All statuses"}
                   </option>
                 ))}
               </Select>

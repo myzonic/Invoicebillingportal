@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 
 const tones: Record<string, string> = {
   DRAFT: "bg-muted text-muted-foreground",
@@ -35,5 +35,5 @@ export function Badge({ children, tone, className }: { children: React.ReactNode
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge tone={status}>{status.replace("_", " ").toLowerCase()}</Badge>;
+  return <Badge tone={status}>{statusLabel(status)}</Badge>;
 }

@@ -9,6 +9,15 @@ import { requireAuth } from "../../middleware/auth";
 import { can } from "../../middleware/rbac";
 import { audit } from "../../utils/audit";
 import { renderInvoicePdf } from "../../services/pdf";
+import { computeInvoiceTotals } from "../../services/invoiceMath";
+import { normalizeBuilderData } from "../../services/invoiceBuilder";
+import {
+  effectiveInvoiceStatus,
+  numeric,
+  paidAmountForInvoice,
+  statusLabel,
+  type MonetaryPayment,
+} from "../../services/invoiceStatus";
 import { sendInvoiceEmail } from "../../services/email";
 import { invoicePermalink, withPermalink } from "../../services/permalink";
 import { env } from "../../config/env";
@@ -20,6 +29,11 @@ const itemSchema = z.object({
   description: z.string().min(1),
   quantity: z.number().positive(),
   unitPrice: z.number().nonnegative(),
+  // Builder extras. Absent on historical invoices; no behaviour change.
+  discount: z.number().nonnegative().optional(),
+  taxRate: z.number().min(0).max(100).optional(),
+  notes: z.string().optional(),
+  id: z.string().optional(),
 });
 
 const invoiceSchema = z.object({
@@ -31,17 +45,20 @@ const invoiceSchema = z.object({
   currency: z.string().min(3).max(3).optional(),
   color: z.string().optional(),
   designOverride: z.unknown().optional(),
+  builderData: z.unknown().optional(),
   notes: z.string().optional(),
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date().optional(),
-  status: z.nativeEnum(InvoiceStatus).optional(),
 });
 
-function computeTotals(items: z.infer<typeof itemSchema>[], taxRate: number, discountAmount: number) {
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-  const total = subtotal + taxAmount - discountAmount;
-  return { subtotal, taxAmount, total: Math.max(0, total) };
+function computeTotals(body: z.infer<typeof invoiceSchema>) {
+  const builder = normalizeBuilderData(body.builderData);
+  return computeInvoiceTotals({
+    items: body.items,
+    taxRate: body.taxRate,
+    discountAmount: body.discountAmount,
+    shipping: builder.shipping,
+  });
 }
 
 async function companyDetails() {
@@ -114,13 +131,6 @@ function money(value: number | string | { toNumber: () => number }, currency: st
 }
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{ include: { client: true; brand: true } }>;
-type MonetaryPayment = {
-  amount: Prisma.Decimal | number;
-  currency: string;
-  invoiceAmount?: Prisma.Decimal | number | null;
-  invoiceCurrency?: string | null;
-  exchangeRate?: Prisma.Decimal | number | null;
-};
 type EmailInvoice = InvoiceWithRelations & { payments?: MonetaryPayment[] };
 type CurrencyTotal = { currency: string; amount: number };
 type InvoiceSummary = {
@@ -132,16 +142,6 @@ type InvoiceSummary = {
   draftInvoices: number;
   draftAmount: CurrencyTotal[];
 };
-
-function numeric(value: unknown): number {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  if (typeof value === "string") return Number(value) || 0;
-  if (value && typeof value === "object" && "toNumber" in value) {
-    const fn = (value as { toNumber?: unknown }).toNumber;
-    if (typeof fn === "function") return Number((fn as () => unknown).call(value)) || 0;
-  }
-  return 0;
-}
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -157,21 +157,6 @@ function jsonUpdateValue(value: unknown) {
   if (value === undefined) return undefined;
   if (value === null) return Prisma.DbNull;
   return value;
-}
-
-/** Convert a payment back into the invoice's own currency using its stored snapshot. */
-function paidAmountForInvoice(invoice: { currency: string }, payments: MonetaryPayment[]) {
-  let paid = 0;
-  for (const payment of payments) {
-    if (payment.invoiceCurrency && payment.invoiceAmount != null) {
-      if (payment.invoiceCurrency === invoice.currency) paid += numeric(payment.invoiceAmount);
-      else if (payment.exchangeRate != null) paid += numeric(payment.amount) * numeric(payment.exchangeRate);
-      continue;
-    }
-    if (payment.currency === invoice.currency) paid += numeric(payment.amount);
-    else if (payment.exchangeRate != null) paid += numeric(payment.amount) * numeric(payment.exchangeRate);
-  }
-  return Math.round(paid * 100) / 100;
 }
 
 function parseDateFilter(value: unknown, endOfDay = false) {
@@ -209,6 +194,13 @@ function currencyTotals(bucket: Map<string, number>): CurrencyTotal[] {
 function addTotal(bucket: Map<string, number>, currency: string, amount: number) {
   if (!Number.isFinite(amount)) return;
   bucket.set(currency, (bucket.get(currency) || 0) + amount);
+}
+
+/** Attach the read-time status (including calculated Overdue) to API rows. */
+function withComputedStatus<
+  T extends { status: InvoiceStatus; currency: string; total: Prisma.Decimal | number; dueDate: Date | null; payments: MonetaryPayment[] },
+>(invoice: T) {
+  return { ...invoice, displayStatus: effectiveInvoiceStatus(invoice, invoice.payments) };
 }
 
 /**
@@ -307,6 +299,9 @@ async function emailInvoiceDocument(invoice: EmailInvoice, ctx: EmailContext) {
   const paid = paidAmountForInvoice(invoice, invoice.payments || []);
   const balance = Math.max(0, numeric(invoice.total) - paid);
   const permalink = invoicePermalink(invoice, invoice.brand);
+  const builderInfo = normalizeBuilderData((invoice as unknown as { builderData?: unknown }).builderData);
+  const line = (label: string, value: string) =>
+    value.trim() ? `<p><strong>${label}:</strong><br/>${escapeHtml(value).replace(/\n/g, "<br/>")}</p>` : "";
 
   const subject = `Invoice ${invoice.number} from ${invoice.brand?.name || company.name || env.branding.companyName}`;
   const result = await sendInvoiceEmail({
@@ -319,6 +314,8 @@ async function emailInvoiceDocument(invoice: EmailInvoice, ctx: EmailContext) {
       <p>Amount due: <strong>${escapeHtml(money(balance, invoice.currency))}</strong></p>
       <p><a href="${escapeHtml(permalink)}">View and pay online</a></p>
       ${invoice.squarePaymentLink ? `<p><a href="${escapeHtml(invoice.squarePaymentLink)}">Pay securely via Square</a></p>` : ""}
+      ${line("Payment instructions", builderInfo.paymentInstructions)}
+      ${line("Payment terms", builderInfo.paymentTerms)}
       <p>Thank you for your business.</p>
     `,
     attachments: [{ filename: `${invoice.number}.pdf`, content: pdf, contentType: "application/pdf" }],
@@ -413,7 +410,7 @@ router.get(
 
     res.json({
       success: true,
-      data: rows.map((row) => withPermalink(row, row.brand)),
+      data: rows.map((row) => withComputedStatus(withPermalink(row, row.brand))),
       meta: { page, limit, total, pages: Math.ceil(total / limit) },
       summary,
     });
@@ -525,7 +522,7 @@ router.get(
       include: { client: true, brand: true, payments: true },
     });
     if (!invoice) throw new ApiError(404, "Invoice not found");
-    res.json({ success: true, data: withPermalink(invoice, invoice.brand) });
+    res.json({ success: true, data: withComputedStatus(withPermalink(invoice, invoice.brand)) });
   }),
 );
 
@@ -537,7 +534,7 @@ router.post(
     const client = await prisma.client.findUnique({ where: { id: body.clientId } });
     if (!client) throw new ApiError(404, "Client not found");
 
-    const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
+    const { subtotal, taxAmount, total } = computeTotals(body);
     const brand = await resolveBrand(body.brandId, client.brandId);
     const currency = body.currency || brand.currency || "USD";
     const initialsForNumber = initials(brand.name);
@@ -566,10 +563,11 @@ router.post(
             // without copying a stale value at creation time.
             color: body.color || undefined,
             designOverride: body.designOverride ?? undefined,
+            builderData: body.builderData == null ? Prisma.DbNull : body.builderData,
             notes: body.notes,
             issueDate: body.issueDate,
             dueDate: body.dueDate,
-            status: body.status ?? InvoiceStatus.DRAFT,
+            status: InvoiceStatus.DRAFT,
           },
           include: { client: true, brand: true },
         });
@@ -602,7 +600,7 @@ router.post(
     if (!client) throw new ApiError(404, "Client not found");
     const brand = await resolveBrand(body.brandId, client.brandId);
     const currency = body.currency || brand.currency || "USD";
-    const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
+    const { subtotal, taxAmount, total } = computeTotals(body);
 
     const preview = {
       id: "preview",
@@ -618,7 +616,8 @@ router.post(
       currency,
       color: body.color || brand.color || null,
       designOverride: body.designOverride ?? null,
-      status: body.status || InvoiceStatus.DRAFT,
+      builderData: body.builderData ?? null,
+      status: InvoiceStatus.DRAFT,
       notes: body.notes || null,
       issueDate: body.issueDate,
       dueDate: body.dueDate || null,
@@ -656,17 +655,28 @@ router.put(
       where: { invoiceId: existing.id, method: PaymentMethod.SQUARE, status: PaymentStatus.PENDING },
     });
     if (existing.squarePaymentLink || pendingSquare) {
+      const amountSignature = (items: unknown) =>
+        JSON.stringify(
+          (Array.isArray(items) ? items : []).map((i: Record<string, unknown>) => [
+            i.description,
+            Number(i.quantity),
+            Number(i.unitPrice),
+            Number(i.discount || 0),
+            i.taxRate == null ? null : Number(i.taxRate),
+          ]),
+        );
       const amountsChanged =
-        JSON.stringify(body.items) !== JSON.stringify(existing.items) ||
+        amountSignature(body.items) !== amountSignature(existing.items) ||
         Number(body.taxRate) !== Number(existing.taxRate) ||
         Number(body.discountAmount) !== Number(existing.discountAmount) ||
+        Number(normalizeBuilderData(body.builderData).shipping) !== Number(normalizeBuilderData(existing.builderData).shipping) ||
         currency !== existing.currency;
       if (amountsChanged) {
         throw new ApiError(400, "Amounts cannot be changed while a Square payment link is active. Cancel the payment link first.");
       }
     }
 
-    const { subtotal, taxAmount, total } = computeTotals(body.items, body.taxRate, body.discountAmount);
+    const { subtotal, taxAmount, total } = computeTotals(body);
 
     const invoice = await prisma.invoice.update({
       where: { id: req.params.id },
@@ -682,10 +692,10 @@ router.put(
         currency,
         color: body.color || undefined,
         designOverride: jsonUpdateValue(body.designOverride),
+        builderData: jsonUpdateValue(body.builderData),
         notes: body.notes,
         issueDate: body.issueDate,
         dueDate: body.dueDate,
-        status: body.status ?? existing.status,
       },
       include: { client: true, brand: true },
     });
@@ -699,35 +709,6 @@ router.put(
       ip: req.ip,
     });
     res.json({ success: true, data: withPermalink(invoice, invoice.brand) });
-  }),
-);
-
-router.patch(
-  "/:id/status",
-  can("invoices", "update"),
-  asyncHandler(async (req, res) => {
-    const status = z.nativeEnum(InvoiceStatus).parse(req.body.status);
-    const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
-    if (!invoice) throw new ApiError(404, "Invoice not found");
-
-    const updated = await prisma.invoice.update({
-      where: { id: req.params.id },
-      data: {
-        status,
-        ...(status === InvoiceStatus.PAID ? { paidAt: new Date() } : {}),
-        ...(status === InvoiceStatus.SENT ? { sentAt: new Date() } : {}),
-      },
-      include: { client: true, brand: true },
-    });
-    await audit({
-      userId: req.user?.id,
-      userEmail: req.user?.email,
-      module: "invoices",
-      action: LogAction.UPDATE,
-      details: { id: invoice.id, status },
-      ip: req.ip,
-    });
-    res.json({ success: true, data: withPermalink(updated, updated.brand) });
   }),
 );
 

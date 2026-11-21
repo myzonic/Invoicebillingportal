@@ -63,7 +63,6 @@ export default function DirectInvoice() {
         color: color || undefined,
         issueDate: new Date(issueDate).toISOString(),
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
-        status: "DRAFT",
       }).unwrap();
       toast.success("Invoice created");
       navigate("/dashboard/invoices");

@@ -7,6 +7,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import { createInvoiceCheckoutUrl, chargeInvoiceWithToken } from "../../services/square";
 import { renderInvoicePdf } from "../../services/pdf";
+import { effectiveInvoiceStatus, syncInvoiceStatus } from "../../services/invoiceStatus";
 import { claimPaymentQuote, createPaymentQuote, loadPaymentQuote } from "../../services/paymentQuote";
 import { brandFromHost, invoicePermalink, paymentDomain } from "../../services/permalink";
 import { audit } from "../../utils/audit";
@@ -27,7 +28,7 @@ function paymentState(invoice: { status: string; payments: Array<{ status: Payme
   if (invoice.status === "PAID") return "COMPLETED";
   if (invoice.status === "CANCELLED") return "CANCELLED";
   if (invoice.status === "PARTIALLY_PAID") return "PARTIALLY_PAID";
-  if (invoice.status === "OVERDUE") return "EXPIRED";
+  if (invoice.status === "OVERDUE") return "OVERDUE";
   if (invoice.payments.some((p) => p.status === PaymentStatus.PENDING)) return "PROCESSING";
   return "UNPAID";
 }
@@ -142,31 +143,27 @@ router.post(
     if (payment.status !== "COMPLETED") throw new ApiError(400, `Square payment ${payment.status}`);
 
     const paidAt = new Date();
-    await prisma.$transaction([
-      prisma.invoice.update({
-        where: { id: invoice.id },
-        data: { status: "PAID", paidAt },
-      }),
-      prisma.payment.create({
-        data: {
-          invoiceId: invoice.id,
-          amount: chargeAmount,
-          currency: chargeCurrency,
-          method: PaymentMethod.SQUARE,
-          status: PaymentStatus.SUCCEEDED,
-          reference: payment.id,
-          locationId,
-          quoteId: quote.id,
-          invoiceAmount: Number(quote.invoiceAmount),
-          invoiceCurrency: quote.invoiceCurrency,
-          exchangeRate: quote.exchangeRate,
-          exchangeRateProvider: quote.provider,
-          exchangeRateAt: quote.rateAt,
-          usdAmount: quote.usdAmount,
-          capturedAt: paidAt,
-        },
-      }),
-    ]);
+    await prisma.payment.create({
+      data: {
+        invoiceId: invoice.id,
+        amount: chargeAmount,
+        currency: chargeCurrency,
+        method: PaymentMethod.SQUARE,
+        status: PaymentStatus.SUCCEEDED,
+        reference: payment.id,
+        locationId,
+        quoteId: quote.id,
+        invoiceAmount: Number(quote.invoiceAmount),
+        invoiceCurrency: quote.invoiceCurrency,
+        exchangeRate: quote.exchangeRate,
+        exchangeRateProvider: quote.provider,
+        exchangeRateAt: quote.rateAt,
+        usdAmount: quote.usdAmount,
+        capturedAt: paidAt,
+      },
+    });
+    // Status is derived from successful payments, never set directly here.
+    await syncInvoiceStatus(invoice.id);
 
     await audit({
       module: "payments",
@@ -253,7 +250,7 @@ router.get(
         publicToken: invoice.publicToken,
         permalink: invoicePermalink(invoice, invoice.brand),
         paymentDomain: paymentDomain(invoice.brand),
-        paymentState: paymentState(invoice),
+        paymentState: paymentState({ ...invoice, status: effectiveInvoiceStatus(invoice, invoice.payments) }),
         pendingPayment: invoice.payments.some((p) => p.status === PaymentStatus.PENDING),
         number: invoice.number,
         items: display.items,
@@ -266,6 +263,7 @@ router.get(
         baseCurrency,
         color: invoice.color,
         designOverride: invoice.designOverride,
+        builderData: (invoice as unknown as { builderData?: unknown }).builderData ?? null,
         status: invoice.status,
         issueDate: invoice.issueDate,
         dueDate: invoice.dueDate,

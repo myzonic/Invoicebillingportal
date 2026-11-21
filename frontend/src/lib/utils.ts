@@ -63,6 +63,26 @@ export function formatDate(value?: string | Date | null) {
   return new Date(value).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** Human-friendly status labels. SENT is called "Active" everywhere in the UI. */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SENT: "Active",
+  PARTIALLY_PAID: "Partially paid",
+  PAID: "Paid",
+  OVERDUE: "Overdue",
+  CANCELLED: "Cancelled",
+  UNPAID: "Unpaid",
+  PROCESSING: "Processing",
+  COMPLETED: "Paid",
+  EXPIRED: "Overdue",
+};
+
+export function statusLabel(value?: string | null): string {
+  const raw = String(value || "").toUpperCase();
+  if (STATUS_LABELS[raw]) return STATUS_LABELS[raw];
+  return raw.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function errorMessage(err: unknown): string {
   if (typeof err === "object" && err !== null) {
     const e = err as { response?: { data?: { message?: string } }; message?: string };

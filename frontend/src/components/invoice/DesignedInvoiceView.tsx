@@ -1,7 +1,7 @@
 import type { InvoiceDesign } from "@/types";
 import { mixHex, tint } from "@/lib/invoiceDesign";
 import { tones, type PreviewItem } from "@/components/invoiceDesign/InvoiceDesignPreview";
-import { formatDate, money, rgba, richText, shade } from "@/lib/utils";
+import { formatDate, money, rgba, richText, shade, statusLabel } from "@/lib/utils";
 import { ArrowRight, FileText, Lock } from "lucide-react";
 import Logo from "@/components/Logo";
 import { branding } from "@/config/branding";
@@ -33,6 +33,17 @@ export interface DesignedInvoiceData {
     pdfFooter?: string | null;
   } | null;
   company?: { name: string; email: string; phone: string; address: string; website: string };
+  builderData?: {
+    shipping?: number;
+    paymentTerms?: string;
+    paymentInstructions?: string;
+    terms?: string;
+    customerCompany?: string;
+    customerTaxId?: string;
+    billingAddress?: string;
+    shippingAddress?: string;
+    attachments?: Array<{ name: string; url: string }>;
+  } | null;
 }
 
 interface Props {
@@ -61,7 +72,7 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
   const footerText = brand?.pdfFooter?.trim() || `Thank you for your business. ${businessName}`;
   const totalPanelBg = t.headerDark ? t.primary : mixHex(t.accent, "#ffffff", 0.86);
   const totalPanelText = t.headerDark ? "#ffffff" : t.primary;
-  const status = (data.paymentState || data.status || "").replace("_", " ");
+  const status = statusLabel(data.paymentState || data.status);
 
   return (
     <div
@@ -206,7 +217,7 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
                 {item.quantity}
               </div>
               <div className="text-right text-sm font-semibold" style={{ color: t.ink }}>
-                {money(item.quantity * item.unitPrice, data.currency)}
+                {money(item.quantity * item.unitPrice - Number(item.discount || 0), data.currency)}
               </div>
             </div>
           ))}
@@ -221,6 +232,23 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
             <p className="mt-1 whitespace-pre-line text-xs leading-relaxed" style={{ color: t.muted }}>
               {data.notes?.trim() || "Payment is due by the due date shown above."}
             </p>
+            {data.builderData?.paymentInstructions && (
+              <p className="mt-2 whitespace-pre-line text-xs leading-relaxed" style={{ color: t.muted }}>
+                <span className="font-semibold" style={{ color: t.secondary }}>Payment instructions: </span>
+                {data.builderData.paymentInstructions}
+              </p>
+            )}
+            {data.builderData?.paymentTerms && (
+              <p className="mt-2 whitespace-pre-line text-xs leading-relaxed" style={{ color: t.muted }}>
+                <span className="font-semibold" style={{ color: t.secondary }}>Payment terms: </span>
+                {data.builderData.paymentTerms}
+              </p>
+            )}
+            {data.builderData?.terms && (
+              <p className="mt-2 whitespace-pre-line text-[11px] leading-relaxed" style={{ color: t.muted }}>
+                {data.builderData.terms}
+              </p>
+            )}
           </div>
           <div>
             <div className="space-y-1.5 text-sm">
@@ -238,6 +266,12 @@ export function DesignedInvoiceView({ data, design, pdfUrl, onPay, paid }: Props
                 <div className="flex justify-between">
                   <span style={{ color: t.muted }}>Discount</span>
                   <span style={{ color: t.ink }}>- {money(data.discountAmount, data.currency)}</span>
+                </div>
+              )}
+              {Number(data.builderData?.shipping || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span style={{ color: t.muted }}>Shipping</span>
+                  <span style={{ color: t.ink }}>{money(data.builderData?.shipping || 0, data.currency)}</span>
                 </div>
               )}
             </div>

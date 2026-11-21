@@ -111,7 +111,7 @@ export default function ClientDetail() {
               <TD>{formatDate(inv.dueDate)}</TD>
               <TD>{money(inv.total, inv.currency)}</TD>
               <TD>
-                <StatusBadge status={inv.status} />
+                <StatusBadge status={inv.displayStatus || inv.status} />
               </TD>
             </TR>
           ))}

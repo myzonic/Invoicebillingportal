@@ -13,7 +13,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset-admin-password": "tsx prisma/reset-admin-password.ts",
     "typecheck": "tsc --noEmit",
-    "verify:currency": "tsx scripts/verify-currency.ts"
+    "verify:currency": "tsx scripts/verify-currency.ts",
+    "verify:status": "tsx scripts/verify-status.ts",
+    "verify:math": "tsx scripts/verify-math.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.0",
