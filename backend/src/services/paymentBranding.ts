@@ -54,6 +54,23 @@ function hex(value: unknown, fallback: string): string {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(raw) ? raw : fallback;
 }
 
+function luminance(color: string): number {
+  const full = color.replace("#", "");
+  const value = Number.parseInt(full.length === 3 ? full.split("").map((c) => c + c).join("") : full, 16);
+  if (Number.isNaN(value)) return 0;
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrast(a: string, b: string): number {
+  const first = luminance(a);
+  const second = luminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
 /**
  * Central, reusable identity payload for every client-facing payment surface.
  * Colors come only from the detected brand's stored design/logo palette.
@@ -69,6 +86,12 @@ export function paymentBrandIdentity(brand: BrandLike | null | undefined) {
   const secondary = hex(design?.colors.secondary || extracted[1], primary);
   const accent = hex(design?.colors.accent || brand.color || extracted[2] || extracted[0], neutral.accent);
   const supporting = hex(design?.colors.supporting, neutral.supporting);
+
+  // Text sits on the supporting/background surface. Prefer the brand's own
+  // ink, then its secondary color; only fall back to a neutral when neither
+  // configured color is readable. This never pulls another brand's identity.
+  const text = [primary, secondary].find((color) => contrast(color, supporting) >= 4.5)
+    || (luminance(supporting) > 0.5 ? neutral.text : "#ffffff");
 
   return {
     id: brand.id,
@@ -87,7 +110,7 @@ export function paymentBrandIdentity(brand: BrandLike | null | undefined) {
       // Semantic aliases used by the success screen. All six values are still
       // derived from this one brand's configuration, never from a default brand.
       background: supporting,
-      text: primary,
+      text,
       button: accent,
     },
   };

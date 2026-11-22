@@ -23,16 +23,32 @@ interface Props {
   pdfHref?: string | null;
 }
 
-function readableText(hex: string): string {
+function luminance(hex: string): number {
   const raw = hex.replace("#", "");
   const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
   const value = Number.parseInt(full, 16);
-  if (Number.isNaN(value)) return "#ffffff";
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.62 ? "#253238" : "#ffffff";
+  if (Number.isNaN(value)) return 0;
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrast(a: string, b: string): number {
+  const first = luminance(a);
+  const second = luminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+/** Picks a readable foreground for a brand color while keeping brand ink first. */
+function onSurface(color: string, surface: string, fallback: string): string {
+  return contrast(color, surface) >= 4.5 ? color : fallback;
+}
+
+/** Picks the better of white and the brand ink for text on a colored button. */
+function buttonText(background: string, ink: string): string {
+  return contrast("#ffffff", background) >= contrast(ink, background) ? "#ffffff" : ink;
 }
 
 function initials(name: string): string {
@@ -60,6 +76,14 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
   const StatusIcon = showPending ? Loader2 : showSuccess ? CheckCircle2 : XCircle;
   const statusColor = showPending ? colors.secondary : showSuccess ? colors.accent : "#dc2626";
 
+  // The card is white, while the outer surface uses the brand background.
+  // Keep every readable choice inside the detected brand's own palette.
+  const cardText = onSurface(colors.text, "#ffffff", colors.primary);
+  const cardMuted = onSurface(colors.secondary, "#ffffff", colors.primary);
+  const emphasis = onSurface(colors.accent, "#ffffff", colors.primary);
+  const statusInk = onSurface(statusColor, "#ffffff", colors.primary);
+  const buttonInk = buttonText(colors.button, colors.primary);
+
   return (
     <div
       className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6"
@@ -78,6 +102,7 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
         className="relative w-full max-w-md rounded-3xl border px-6 py-9 text-center shadow-xl sm:px-8"
         style={{
           background: "#ffffff",
+          color: cardText,
           borderColor: rgba(colors.accent, 0.35),
           boxShadow: `0 28px 70px -34px ${rgba(colors.primary, 0.55)}`,
         }}
@@ -102,13 +127,13 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
           )}
         </div>
 
-        <p className="mb-5 text-sm font-semibold tracking-wide" style={{ color: colors.secondary }}>
+        <p className="mb-5 text-sm font-semibold tracking-wide" style={{ color: cardMuted }}>
           {displayName}
         </p>
 
         <div
           className="mx-auto mb-5 flex size-16 items-center justify-center rounded-full"
-          style={{ background: rgba(statusColor, 0.14), color: statusColor }}
+          style={{ background: rgba(statusInk, 0.14), color: statusInk }}
         >
           <StatusIcon className={`size-8 ${showPending ? "animate-spin" : ""}`} aria-hidden="true" />
         </div>
@@ -124,27 +149,27 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
         </h1>
 
         {showPending ? (
-          <p className="mt-3 text-sm" style={{ color: colors.text }}>
+          <p className="mt-3 text-sm" style={{ color: cardText }}>
             We are checking the payment with Square. This page will update automatically.
           </p>
         ) : showSuccess ? (
           <>
             {confirmedAmount && (
-              <p className="mt-3 text-3xl font-extrabold" style={{ color: colors.accent }}>
+              <p className="mt-3 text-3xl font-extrabold" style={{ color: emphasis }}>
                 {confirmedAmount}
               </p>
             )}
             {invoice?.number && (
-              <p className="mt-2 text-xs font-medium" style={{ color: colors.secondary }}>
+              <p className="mt-2 text-xs font-medium" style={{ color: cardMuted }}>
                 Invoice {invoice.number}
               </p>
             )}
-            <p className="mt-4 text-sm" style={{ color: colors.text }}>
+            <p className="mt-4 text-sm" style={{ color: cardText }}>
               Thank you! Your payment has been received. A receipt is on its way to your email.
             </p>
           </>
         ) : (
-          <p className="mt-3 text-sm" style={{ color: colors.text }}>
+          <p className="mt-3 text-sm" style={{ color: cardText }}>
             {variant === "cancel"
               ? "You cancelled the payment. No charge was made. You can try again at any time."
               : "We could not verify a completed payment for this invoice. Please check your payment status or contact support."}
@@ -152,7 +177,7 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
         )}
 
         {brand.pdfFooter && (
-          <p className="mt-5 whitespace-pre-line text-xs" style={{ color: colors.secondary }}>
+          <p className="mt-5 whitespace-pre-line text-xs" style={{ color: cardMuted }}>
             {brand.pdfFooter}
           </p>
         )}
@@ -161,7 +186,7 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
           <a
             href={pdfHref}
             className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold transition-opacity hover:opacity-90"
-            style={{ background: colors.button, color: readableText(colors.button) }}
+            style={{ background: colors.button, color: buttonInk }}
           >
             <Download className="size-4" aria-hidden="true" /> Download Invoice PDF
           </a>
