@@ -26,5 +26,14 @@ export const branding = {
   defaultBrandName: runtime.defaultBrandName || import.meta.env.VITE_DEFAULT_BRAND_NAME || "Your Company",
 };
 
-document.title = `${branding.companyName} — ${branding.portalName}`;
-document.querySelector('meta[name="description"]')?.setAttribute("content", `${branding.companyName} ${branding.portalTagline} portal`);
+// Link-preview metadata is the single source of truth for title/description.
+// Static index.html defines the OG tags so crawlers see them without JS;
+// sync the live document to those same values when the app boots.
+const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute("content");
+const ogDescription = document.querySelector('meta[property="og:description"]')?.getAttribute("content");
+
+document.title = ogTitle || `${branding.companyName} — ${branding.portalName}`;
+document.querySelector('meta[name="description"]')?.setAttribute(
+  "content",
+  ogDescription || `${branding.companyName} ${branding.portalTagline} portal`,
+);
