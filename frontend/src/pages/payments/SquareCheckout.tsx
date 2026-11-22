@@ -219,7 +219,7 @@ export default function SquareCheckout() {
         background: `linear-gradient(135deg, ${tint(t?.supporting || accent, 0.96)} 0%, ${tint(t?.supporting || accent, 0.88)} 55%, ${tint(t?.accent || accent, 0.9)} 100%)`,
       }}
     >
-      <div className="relative mx-auto grid w-full max-w-[1250px] grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
+      <div className="relative mx-auto grid w-full max-w-[1250px] grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] xl:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
         {/* Left: premium client invoice */}
         <Card
           className="min-w-0 overflow-hidden border bg-white text-neutral-900"
@@ -227,38 +227,38 @@ export default function SquareCheckout() {
         >
           {/* ---------- Header band ---------- */}
           <div
-            className="flex flex-col gap-6 px-5 py-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-4 sm:px-12 sm:py-8"
+            className="grid grid-cols-1 gap-5 px-5 py-6 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-x-4 sm:px-10 sm:py-7 lg:gap-x-4 lg:px-8 xl:gap-x-6 xl:px-12 xl:py-8"
             style={{
               background: headerDark ? primary : "transparent",
               borderTop: headerDark ? `3px solid ${accent}` : `4px solid ${primary}`,
               borderBottom: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
             }}
           >
-            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+            <div className="flex min-w-0 flex-col gap-4 sm:contents">
               <Logo
                 src={brand?.logoUrl}
                 alt={brandName}
-                className="h-auto max-h-14 w-auto max-w-[180px] shrink-0 object-contain sm:max-h-20 sm:max-w-[260px]"
+                className="h-auto max-h-14 w-auto max-w-[180px] shrink-0 object-contain sm:max-h-12 sm:max-w-[110px] lg:max-h-10 lg:max-w-[90px] xl:max-h-16 xl:max-w-[190px] 2xl:max-h-20 2xl:max-w-[240px]"
               />
               <div className="min-w-0 break-words">
-                <h1 className="font-serif text-[22px] font-semibold leading-tight tracking-tight sm:text-[28px]" style={{ color: headerText }}>
+                <h1 className="font-serif text-[22px] font-semibold leading-tight tracking-tight sm:text-xl lg:text-lg xl:text-[26px] 2xl:text-[28px]" style={{ color: headerText }}>
                   {brandName}
                 </h1>
-                <p className="mt-1.5 break-words text-[11px] leading-relaxed sm:text-[13px]" style={{ color: headerMuted }}>
+                <p className="mt-1.5 break-words text-[11px] leading-relaxed xl:text-[13px]" style={{ color: headerMuted }}>
                   {brand?.address || company.address}
                 </p>
-                <p className="mt-0.5 break-words text-[11px] leading-relaxed sm:text-[13px]" style={{ color: headerMuted }}>
+                <p className="mt-0.5 break-words text-[11px] leading-relaxed xl:text-[13px]" style={{ color: headerMuted }}>
                   {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
                 </p>
                 {headerLines.length > 0 && (
-                  <p className="mt-2 whitespace-pre-line break-words text-[11px] leading-relaxed sm:text-[13px]" style={{ color: headerTitle }}>
+                  <p className="mt-2 whitespace-pre-line break-words text-[11px] leading-relaxed xl:text-[13px]" style={{ color: headerTitle }}>
                     {headerLines.join("\n")}
                   </p>
                 )}
               </div>
             </div>
             <div
-              className="border-t pt-4 text-left sm:border-t-0 sm:pt-0 sm:text-right"
+              className="border-t pt-4 text-left sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 sm:text-right"
               style={{ borderColor: headerDark ? "rgba(255,255,255,.28)" : line }}
             >
               <div className="font-serif text-2xl font-semibold uppercase tracking-wide sm:text-3xl" style={{ color: headerTitle }}>
