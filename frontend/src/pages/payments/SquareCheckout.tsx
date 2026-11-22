@@ -219,82 +219,125 @@ export default function SquareCheckout() {
         background: `linear-gradient(135deg, ${tint(t?.supporting || accent, 0.96)} 0%, ${tint(t?.supporting || accent, 0.88)} 55%, ${tint(t?.accent || accent, 0.9)} 100%)`,
       }}
     >
-      <div className="relative mx-auto grid w-full max-w-[1250px] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
+      <div className="relative mx-auto grid w-full max-w-[1250px] grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
         {/* Left: premium client invoice */}
         <Card
-          className="overflow-hidden border bg-white text-neutral-900"
+          className="min-w-0 overflow-hidden border bg-white text-neutral-900"
           style={{ borderColor: line, boxShadow: `0 24px 60px -24px ${rgba(primary, 0.35)}` }}
         >
           {/* ---------- Header band ---------- */}
           <div
-            className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 px-6 py-6 sm:px-12 sm:py-8"
+            className="flex flex-col gap-6 px-5 py-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-4 sm:px-12 sm:py-8"
             style={{
               background: headerDark ? primary : "transparent",
               borderTop: headerDark ? `3px solid ${accent}` : `4px solid ${primary}`,
               borderBottom: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
             }}
           >
-            <div className="flex min-w-0 items-start gap-5">
+            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
               <Logo
                 src={brand?.logoUrl}
                 alt={brandName}
-                className="h-auto max-h-16 w-auto max-w-[160px] shrink-0 object-contain sm:max-h-20 sm:max-w-[260px]"
+                className="h-auto max-h-14 w-auto max-w-[180px] shrink-0 object-contain sm:max-h-20 sm:max-w-[260px]"
               />
-              <div className="min-w-0">
-                <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-[28px]" style={{ color: headerText }}>
+              <div className="min-w-0 break-words">
+                <h1 className="font-serif text-[22px] font-semibold leading-tight tracking-tight sm:text-[28px]" style={{ color: headerText }}>
                   {brandName}
                 </h1>
-                <p className="mt-1.5 text-xs sm:text-[13px]" style={{ color: headerMuted }}>{brand?.address || company.address}</p>
-                <p className="mt-0.5 text-xs sm:text-[13px]" style={{ color: headerMuted }}>
+                <p className="mt-1.5 break-words text-[11px] leading-relaxed sm:text-[13px]" style={{ color: headerMuted }}>
+                  {brand?.address || company.address}
+                </p>
+                <p className="mt-0.5 break-words text-[11px] leading-relaxed sm:text-[13px]" style={{ color: headerMuted }}>
                   {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
                 </p>
                 {headerLines.length > 0 && (
-                  <p className="mt-2 whitespace-pre-line text-xs sm:text-[13px]" style={{ color: headerTitle }}>
+                  <p className="mt-2 whitespace-pre-line break-words text-[11px] leading-relaxed sm:text-[13px]" style={{ color: headerTitle }}>
                     {headerLines.join("\n")}
                   </p>
                 )}
               </div>
             </div>
-            <div className="text-right">
-              <div className="font-serif text-3xl font-semibold uppercase tracking-wide" style={{ color: headerTitle }}>
+            <div
+              className="border-t pt-4 text-left sm:border-t-0 sm:pt-0 sm:text-right"
+              style={{ borderColor: headerDark ? "rgba(255,255,255,.28)" : line }}
+            >
+              <div className="font-serif text-2xl font-semibold uppercase tracking-wide sm:text-3xl" style={{ color: headerTitle }}>
                 Invoice
               </div>
-              <div className="mt-1 text-sm font-medium" style={{ color: headerMuted }}># {inv.number}</div>
+              <div className="mt-1 break-words text-xs font-medium sm:text-sm" style={{ color: headerMuted }}>
+                # {inv.number}
+              </div>
             </div>
           </div>
 
           {/* ---------- Body ---------- */}
-          <div className="px-6 py-8 sm:px-12 sm:py-10">
-            <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
+          <div className="px-5 py-7 sm:px-12 sm:py-10">
+            <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+              <div className="min-w-0 break-words">
                 <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: secondary }}>
                   Bill to
                 </h2>
                 <div className="font-semibold" style={{ color: ink }}>{inv.client?.name}</div>
-                {inv.client?.email && <div className="mt-0.5" style={{ color: muted }}>{inv.client.email}</div>}
-                {inv.client?.phone && <div style={{ color: muted }}>{inv.client.phone}</div>}
-                {inv.client?.address && <div className="mt-0.5 whitespace-pre-line" style={{ color: muted }}>{inv.client.address}</div>}
+                {inv.client?.email && <div className="mt-0.5 break-words" style={{ color: muted }}>{inv.client.email}</div>}
+                {inv.client?.phone && <div className="break-words" style={{ color: muted }}>{inv.client.phone}</div>}
+                {inv.client?.address && <div className="mt-0.5 whitespace-pre-line break-words" style={{ color: muted }}>{inv.client.address}</div>}
               </div>
-              <div className="space-y-1.5 text-sm sm:text-right">
-                <div className="flex justify-end gap-2">
-                  <span style={{ color: muted }}>Issue date:</span>
-                  <span className="font-medium" style={{ color: ink }}>{formatDate(inv.issueDate)}</span>
+              <div className="space-y-1.5 text-xs sm:min-w-[210px] sm:text-right sm:text-sm">
+                <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-2">
+                  <span className="shrink-0" style={{ color: muted }}>Issue date:</span>
+                  <span className="text-right font-medium" style={{ color: ink }}>{formatDate(inv.issueDate)}</span>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <span style={{ color: muted }}>Due date:</span>
-                  <span className="font-medium" style={{ color: ink }}>{formatDate(inv.dueDate)}</span>
+                <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-2">
+                  <span className="shrink-0" style={{ color: muted }}>Due date:</span>
+                  <span className="text-right font-medium" style={{ color: ink }}>{formatDate(inv.dueDate)}</span>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <span style={{ color: muted }}>Status:</span>
-                  <span className="font-medium" style={{ color: secondary }}>{statusLabel(inv.status)}</span>
+                <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-2">
+                  <span className="shrink-0" style={{ color: muted }}>Status:</span>
+                  <span className="text-right font-medium" style={{ color: secondary }}>{statusLabel(inv.status)}</span>
                 </div>
               </div>
             </div>
 
-            {/* ---------- Items ---------- */}
-            <table className="mt-8 w-full table-fixed text-sm">
+            {/* ---------- Items: stacked cards on small screens ---------- */}
+            <div className="mt-7 sm:hidden">
+              <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: secondary }}>
+                Items
+              </h2>
+              <div className="space-y-2.5">
+                {items.map((item, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border p-3"
+                    style={{ borderColor: line, background: t && !t.minimal && i % 2 === 1 ? t.softFill : "transparent" }}
+                  >
+                    <div className="break-words text-[13px] font-medium leading-snug" style={{ color: ink }}>
+                      <span className="richtext" dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 border-t pt-3" style={{ borderColor: line }}>
+                      {[
+                        { label: "Qty", value: String(item.quantity) },
+                        { label: "Unit Price", value: money(item.unitPrice, inv.currency) },
+                        { label: "Amount", value: money(itemNet(item), inv.currency) },
+                      ].map((cell) => (
+                        <div key={cell.label} className="min-w-0">
+                          <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: muted }}>
+                            {cell.label}
+                          </div>
+                          <div className="mt-0.5 break-words text-xs font-semibold" style={{ color: ink }}>
+                            {cell.value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ---------- Items: table on larger screens ---------- */}
+            <table className="mt-8 hidden w-full table-fixed text-sm sm:table">
               <colgroup>
-                <col className="w-full sm:w-[46%]" />
+                <col className="w-[46%]" />
                 <col className="w-[12%]" />
                 <col className="w-[21%]" />
                 <col className="w-[21%]" />
@@ -357,26 +400,26 @@ export default function SquareCheckout() {
                   <span className="font-serif text-lg font-semibold uppercase tracking-wide" style={{ color: ink }}>
                     Total
                   </span>
-                  <span className="font-serif text-2xl font-bold" style={{ color: t ? primary : ink }}>
+                  <span className="font-serif text-xl font-bold sm:text-2xl" style={{ color: t ? primary : ink }}>
                     {money(inv.total, inv.currency)}
                   </span>
                 </div>
               </div>
             </div>
 
-            {inv.notes && <p className="mt-6 text-sm" style={{ color: muted }}>Notes: {inv.notes}</p>}
+            {inv.notes && <p className="mt-6 break-words text-xs sm:text-sm" style={{ color: muted }}>Notes: {inv.notes}</p>}
           </div>
 
           <div
-            className="px-6 py-4 sm:px-12"
+            className="px-5 py-4 sm:px-12"
             style={{
               background: headerDark ? primary : "#ffffff",
               borderTop: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
             }}
           >
-            <p className="whitespace-pre-line text-sm" style={{ color: headerMuted }}>{footerText}</p>
+            <p className="whitespace-pre-line break-words text-xs sm:text-sm" style={{ color: headerMuted }}>{footerText}</p>
             {footerContact && (
-              <p className="mt-1 text-xs" style={{ color: headerTitle }}>
+              <p className="mt-1 break-words text-[11px] sm:text-xs" style={{ color: headerTitle }}>
                 {footerContact}
               </p>
             )}
@@ -385,7 +428,7 @@ export default function SquareCheckout() {
 
         {/* Right: card entry */}
         <Card
-          className="sticky top-8 border bg-white/95 backdrop-blur-xl"
+          className="sticky top-8 min-w-0 border bg-white/95 backdrop-blur-xl"
           style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(primary, 0.35)}` }}
         >
           <CardContent>
