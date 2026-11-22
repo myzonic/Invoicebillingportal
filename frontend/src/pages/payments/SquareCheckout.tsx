@@ -384,7 +384,10 @@ export default function SquareCheckout() {
         </Card>
 
         {/* Right: card entry */}
-        <Card className="sticky top-8 border bg-white/95 backdrop-blur-xl">
+        <Card
+          className="sticky top-8 border bg-white/95 backdrop-blur-xl"
+          style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(accent, 0.5)}` }}
+        >
           <CardContent>
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -398,19 +401,40 @@ export default function SquareCheckout() {
                     {brand?.businessName || brand?.name || branding.paymentHost}
                   </p>
                   <p className="flex items-center gap-1 text-[11px] text-neutral-500">
-                    <Lock className="size-3 text-neutral-500" /> Secure checkout
+                    <Lock className="size-3" style={{ color: accentDark }} /> Secure checkout
                   </p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-bold text-neutral-900">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold text-neutral-900"
+                style={{
+                  background: `linear-gradient(180deg, ${shade(accent, 0.5)}, ${accent})`,
+                  boxShadow: `inset 0 1px 0 ${rgba("#ffffff", 0.7)}`,
+                  border: `1px solid ${shade(accent, -0.15)}`,
+                }}
+              >
                 <ShieldCheck className="size-3.5" /> Encrypted
               </span>
             </div>
 
-            <div className="mb-6 flex items-baseline justify-between rounded-xl border bg-neutral-50 px-4 py-3">
+            <div
+              className="mb-6 flex items-baseline justify-between rounded-xl border px-4 py-3"
+              style={{
+                borderColor: rgba(accent, 0.5),
+                background: `linear-gradient(135deg, ${rgba(accent, 0.12)}, ${rgba(accent, 0.26)})`,
+              }}
+            >
               <span className="text-sm font-medium text-neutral-600">Total due</span>
               <div className="text-right">
-                <span className="text-2xl font-bold tracking-tight text-neutral-900">
+                <span
+                  className="text-2xl font-bold tracking-tight"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, ${accent}, ${shade(accent, -0.45)})`,
+                    WebkitBackgroundClip: "text",
+                    backgroundClip: "text",
+                    color: "transparent",
+                  }}
+                >
                   {money(inv.total, inv.currency)}
                 </span>
               </div>
@@ -527,7 +551,11 @@ export default function SquareCheckout() {
                       type="button"
                       disabled={!ready || !quote || busy}
                       onClick={handlePay}
-                      className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-6 text-sm font-bold text-neutral-900 outline-none transition-all hover:bg-neutral-50 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+                      className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold text-white outline-none transition-all hover:brightness-105 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+                      style={{
+                        background: `linear-gradient(180deg, ${shade(accent, 0.2)}, ${shade(accent, -0.05)} 45%, ${shade(accent, -0.25)})`,
+                        boxShadow: `0 8px 20px -6px ${rgba(accent, 0.6)}, inset 0 1px 0 ${rgba("#ffffff", 0.35)}`,
+                      }}
                     >
                       <CreditCard className="size-5" /> Pay {money(inv.total, inv.currency || "USD")} <ArrowRight className="size-4" />
                     </button>
