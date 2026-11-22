@@ -386,7 +386,7 @@ export default function SquareCheckout() {
         {/* Right: card entry */}
         <Card
           className="sticky top-8 border bg-white/95 backdrop-blur-xl"
-          style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(accent, 0.5)}` }}
+          style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(primary, 0.35)}` }}
         >
           <CardContent>
             <div className="mb-6 flex items-center justify-between">
