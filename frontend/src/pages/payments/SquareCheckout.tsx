@@ -234,58 +234,62 @@ export default function SquareCheckout() {
       />
 
       <div className="relative mx-auto grid w-full max-w-[1250px] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
-        {/* Left: PDF-style invoice */}
+        {/* Left: premium client invoice */}
         <Card
           className="overflow-hidden border bg-white text-neutral-900"
           style={{ borderColor: line, boxShadow: `0 24px 60px -24px ${rgba(primary, 0.35)}` }}
         >
+          {/* ---------- Header band ---------- */}
           <div
-            className="flex flex-wrap items-start justify-between gap-4 px-6 py-5 sm:px-10"
+            className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 px-6 py-6 sm:px-12 sm:py-8"
             style={{
               background: headerDark ? primary : "transparent",
               borderTop: headerDark ? `3px solid ${accent}` : `4px solid ${primary}`,
               borderBottom: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
             }}
           >
-            <div className="flex min-w-0 items-start gap-3">
+            <div className="flex min-w-0 items-start gap-5">
               <Logo
                 src={brand?.logoUrl}
                 alt={brandName}
-                className="h-auto max-h-[70px] w-auto max-w-[200px] shrink-0 object-contain"
+                className="h-auto max-h-16 w-auto max-w-[260px] shrink-0 object-contain sm:max-h-20"
               />
               <div className="min-w-0">
-                <div className="truncate text-xl font-bold tracking-tight" style={{ color: headerText }}>
+                <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-[28px]" style={{ color: headerText }}>
                   {brandName}
-                </div>
-                <div className="mt-1 text-xs" style={{ color: headerMuted }}>{brand?.address || company.address}</div>
-                <div className="text-xs" style={{ color: headerMuted }}>
+                </h1>
+                <p className="mt-1.5 text-xs sm:text-[13px]" style={{ color: headerMuted }}>{brand?.address || company.address}</p>
+                <p className="mt-0.5 text-xs sm:text-[13px]" style={{ color: headerMuted }}>
                   {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
-                </div>
+                </p>
                 {headerLines.length > 0 && (
-                  <div className="mt-1 whitespace-pre-line text-xs" style={{ color: headerTitle }}>
+                  <p className="mt-2 whitespace-pre-line text-xs sm:text-[13px]" style={{ color: headerTitle }}>
                     {headerLines.join("\n")}
-                  </div>
+                  </p>
                 )}
               </div>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold uppercase tracking-tight" style={{ color: headerTitle }}>
+              <div className="font-serif text-3xl font-semibold uppercase tracking-wide" style={{ color: headerTitle }}>
                 Invoice
               </div>
               <div className="mt-1 text-sm font-medium" style={{ color: headerMuted }}># {inv.number}</div>
             </div>
           </div>
 
-          <div className="p-6 sm:p-10">
-            <div className="grid grid-cols-2 gap-6 text-sm">
-              <div>
-                <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: secondary }}>Bill to</div>
+          {/* ---------- Body ---------- */}
+          <div className="px-6 py-8 sm:px-12 sm:py-10">
+            <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: secondary }}>
+                  Bill to
+                </h2>
                 <div className="font-semibold" style={{ color: ink }}>{inv.client?.name}</div>
                 {inv.client?.email && <div className="mt-0.5" style={{ color: muted }}>{inv.client.email}</div>}
                 {inv.client?.phone && <div style={{ color: muted }}>{inv.client.phone}</div>}
                 {inv.client?.address && <div className="mt-0.5 whitespace-pre-line" style={{ color: muted }}>{inv.client.address}</div>}
               </div>
-              <div className="space-y-1.5 text-right">
+              <div className="space-y-1.5 text-sm sm:text-right">
                 <div className="flex justify-end gap-2">
                   <span style={{ color: muted }}>Issue date:</span>
                   <span className="font-medium" style={{ color: ink }}>{formatDate(inv.issueDate)}</span>
@@ -301,6 +305,7 @@ export default function SquareCheckout() {
               </div>
             </div>
 
+            {/* ---------- Items ---------- */}
             <table className="mt-8 w-full table-fixed text-sm">
               <colgroup>
                 <col className="w-[46%]" />
@@ -322,47 +327,54 @@ export default function SquareCheckout() {
               <tbody>
                 {items.map((item, i) => (
                   <tr key={i} className="border-b" style={{ borderColor: line, background: t && !t.minimal && i % 2 === 1 ? t.softFill : "transparent" }}>
-                    <td className="py-2.5 pl-0 pr-3 align-top" style={{ color: ink }}>
+                    <td className="py-3 pl-0 pr-3 align-top text-[13px]" style={{ color: ink }}>
                       <span className="richtext" dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
                     </td>
-                    <td className="py-2.5 px-3 text-right align-top" style={{ color: ink }}>{item.quantity}</td>
-                    <td className="py-2.5 px-3 text-right align-top" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
-                    <td className="py-2.5 pl-3 pr-0 text-right font-medium align-top" style={{ color: ink }}>{money(itemNet(item), inv.currency)}</td>
+                    <td className="py-3 px-3 text-right align-top text-[13px]" style={{ color: ink }}>{item.quantity}</td>
+                    <td className="py-3 px-3 text-right align-top text-[13px]" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
+                    <td className="py-3 pl-3 pr-0 text-right font-medium align-top text-[13px]" style={{ color: ink }}>{money(itemNet(item), inv.currency)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <div className="mt-6 flex flex-col items-end gap-1.5 text-sm">
-              <div className="flex w-64 justify-between">
-                <span style={{ color: muted }}>Subtotal</span>
-                <span style={{ color: ink }}>{money(inv.subtotal, inv.currency)}</span>
-              </div>
-              <div className="flex w-64 justify-between">
-                <span style={{ color: muted }}>Tax ({inv.taxRate}%)</span>
-                <span style={{ color: ink }}>{money(inv.taxAmount, inv.currency)}</span>
-              </div>
-              {discountTotal > 0 && (
-                <div className="flex w-64 justify-between">
-                  <span style={{ color: muted }}>Discount</span>
-                  <span style={{ color: ink }}>-{money(discountTotal, inv.currency)}</span>
-                </div>
-              )}
-              {Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping || 0) > 0 && (
-                <div className="flex w-64 justify-between">
-                  <span style={{ color: muted }}>Shipping</span>
-                  <span style={{ color: ink }}>{money(Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping), inv.currency)}</span>
-                </div>
-              )}
+            {/* ---------- Totals ---------- */}
+            <div className="mt-8 flex flex-col items-end gap-3">
               <div
-                className="flex w-64 items-center justify-between px-3 py-2 text-base font-bold"
-                style={{
-                  background: t ? (t.headerDark ? primary : mixHex(accent, "#ffffff", 0.86)) : "#f9fafb",
-                  color: t && t.headerDark ? "#ffffff" : (t ? primary : ink),
-                }}
+                className="w-full max-w-[360px] rounded-lg border p-4"
+                style={{ borderColor: line, background: t ? mixHex(t.supporting, "#ffffff", 0.6) : "#f9fafb" }}
               >
-                <span>TOTAL</span>
-                <span>{money(inv.total, inv.currency)}</span>
+                <div className="flex justify-between text-sm">
+                  <span style={{ color: muted }}>Subtotal</span>
+                  <span style={{ color: ink }}>{money(inv.subtotal, inv.currency)}</span>
+                </div>
+                <div className="mt-1.5 flex justify-between text-sm">
+                  <span style={{ color: muted }}>Tax ({inv.taxRate}%)</span>
+                  <span style={{ color: ink }}>{money(inv.taxAmount, inv.currency)}</span>
+                </div>
+                {discountTotal > 0 && (
+                  <div className="mt-1.5 flex justify-between text-sm">
+                    <span style={{ color: muted }}>Discount</span>
+                    <span style={{ color: ink }}>-{money(discountTotal, inv.currency)}</span>
+                  </div>
+                )}
+                {Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping || 0) > 0 && (
+                  <div className="mt-1.5 flex justify-between text-sm">
+                    <span style={{ color: muted }}>Shipping</span>
+                    <span style={{ color: ink }}>{money(Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping), inv.currency)}</span>
+                  </div>
+                )}
+                <div
+                  className="mt-3 flex items-center justify-between border-t pt-3"
+                  style={{ borderColor: line }}
+                >
+                  <span className="font-serif text-lg font-semibold uppercase tracking-wide" style={{ color: ink }}>
+                    Total
+                  </span>
+                  <span className="font-serif text-2xl font-bold" style={{ color: t ? primary : ink }}>
+                    {money(inv.total, inv.currency)}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -370,7 +382,7 @@ export default function SquareCheckout() {
           </div>
 
           <div
-            className="px-6 py-4 sm:px-10"
+            className="px-6 py-4 sm:px-12"
             style={{
               background: headerDark ? primary : "#ffffff",
               borderTop: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
