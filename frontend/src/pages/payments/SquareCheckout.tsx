@@ -238,7 +238,7 @@ export default function SquareCheckout() {
               <Logo
                 src={brand?.logoUrl}
                 alt={brandName}
-                className="h-auto max-h-16 w-auto max-w-[260px] shrink-0 object-contain sm:max-h-20"
+                className="h-auto max-h-16 w-auto max-w-[160px] shrink-0 object-contain sm:max-h-20 sm:max-w-[260px]"
               />
               <div className="min-w-0">
                 <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-[28px]" style={{ color: headerText }}>
