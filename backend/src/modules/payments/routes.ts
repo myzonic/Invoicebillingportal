@@ -10,6 +10,7 @@ import { renderInvoicePdf } from "../../services/pdf";
 import { effectiveInvoiceStatus, syncInvoiceStatus } from "../../services/invoiceStatus";
 import { claimPaymentQuote, createPaymentQuote, loadPaymentQuote } from "../../services/paymentQuote";
 import { brandFromHost, invoicePermalink, paymentDomain } from "../../services/permalink";
+import { paymentBrandIdentity } from "../../services/paymentBranding";
 import { audit } from "../../utils/audit";
 import { env } from "../../config/env";
 
@@ -54,6 +55,25 @@ router.get(
   }),
 );
 
+/**
+ * Public: resolves the current payment hostname to a single brand identity.
+ * The browser passes its real hostname so this works behind proxies and on the
+ * single-container pay.<domain> deployments. Unknown hosts return 404 and must
+ * never fall back to another brand's logo or colors.
+ */
+router.get(
+  "/brand",
+  asyncHandler(async (req, res) => {
+    const requested = String(req.query.host || "").trim();
+    const forwarded = req.get("x-forwarded-host")?.split(",")[0]?.trim();
+    const host = requested || forwarded || req.get("host") || "";
+    const brands = await prisma.brand.findMany({ where: { isActive: true } });
+    const brand = brandFromHost(host, brands);
+    if (!brand) throw new ApiError(404, "No brand is configured for this payment domain");
+    res.json({ success: true, data: paymentBrandIdentity(brand) });
+  }),
+);
+
 /** Public: resolves an incoming payment host (pay.<domain>) to a brand. */
 router.get(
   "/domain/:host",
@@ -61,18 +81,7 @@ router.get(
     const brands = await prisma.brand.findMany({ where: { isActive: true } });
     const brand = brandFromHost(req.params.host, brands);
     if (!brand) throw new ApiError(404, "No brand is configured for this payment domain");
-    res.json({
-      success: true,
-      data: {
-        id: brand.id,
-        name: brand.name,
-        businessName: brand.businessName,
-        logoUrl: brand.logoUrl,
-        paymentDomain: paymentDomain(brand),
-        currency: brand.currency,
-        paymentEnabled: brand.paymentEnabled,
-      },
-    });
+    res.json({ success: true, data: paymentBrandIdentity(brand) });
   }),
 );
 

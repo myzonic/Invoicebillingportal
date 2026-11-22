@@ -12,6 +12,7 @@ import type {
   InvoiceLog,
   Merchant,
   Paginated,
+  PaymentBrandIdentity,
   PaymentQuote,
   Role,
   User,
@@ -204,6 +205,17 @@ export const apiSlice = createApi({
     >({
       query: (id) => `/payments/public/${id}`,
     }),
+    /**
+     * Brand identity for the actual payment hostname. Adding a brand in the
+     * admin (domain + logo + colors) is enough for its pay.<domain> pages to
+     * pick it up; no success-screen code changes are needed.
+     */
+    paymentBrandIdentity: builder.query<{ data: PaymentBrandIdentity }, void>({
+      query: () => {
+        const host = typeof window === "undefined" ? "" : window.location.hostname;
+        return `/payments/brand?host=${encodeURIComponent(host)}`;
+      },
+    }),
 
     // ---- Brands ----
     brands: builder.query<Paginated<Brand>, ListQuery>({
@@ -345,6 +357,7 @@ export const {
   useInvoiceCheckoutMutation,
   useCreatePaymentQuoteMutation,
   usePublicInvoiceQuery,
+  usePaymentBrandIdentityQuery,
   useBrandsQuery,
   useBrandQuery,
   useCreateBrandMutation,

@@ -99,6 +99,27 @@ export interface Brand {
   _count?: { clients: number; invoices: number };
 }
 
+/** Public, host-detected identity used by client-facing payment screens. */
+export interface PaymentBrandIdentity {
+  id: string;
+  name: string;
+  businessName?: string | null;
+  logoUrl?: string | null;
+  paymentDomain: string;
+  currency: string;
+  paymentEnabled: boolean;
+  pdfFooter?: string | null;
+  colors: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    supporting: string;
+    background: string;
+    text: string;
+    button: string;
+  };
+}
+
 export interface Merchant {
   id: string;
   name: string;

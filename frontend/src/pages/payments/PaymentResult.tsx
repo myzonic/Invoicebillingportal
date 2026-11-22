@@ -1,76 +1,103 @@
-﻿import { useSearchParams } from "react-router-dom";
-import { CheckCircle2, Download, XCircle } from "lucide-react";
-import { usePublicInvoiceQuery } from "@/app/apiSlice";
-import { Card, CardContent } from "@/components/ui/card";
-import { brandColor, money, rgba, shade } from "@/lib/utils";
-import Logo from "@/components/Logo";
+﻿import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
+import { usePaymentBrandIdentityQuery, usePublicInvoiceQuery } from "@/app/apiSlice";
+import PaymentSuccessScreen from "@/components/payments/PaymentSuccessScreen";
+import type { PaymentBrandIdentity } from "@/types";
+
+/** Neutral, brand-free identity for unknown hosts or mismatched invoices. */
+const NEUTRAL_IDENTITY: PaymentBrandIdentity = {
+  id: "neutral",
+  name: "Secure Payment",
+  businessName: null,
+  logoUrl: null,
+  paymentDomain: "",
+  currency: "USD",
+  paymentEnabled: true,
+  pdfFooter: null,
+  colors: {
+    primary: "#253238",
+    secondary: "#4b5b63",
+    accent: "#087f78",
+    supporting: "#f4f7f8",
+    background: "#f4f7f8",
+    text: "#253238",
+    button: "#087f78",
+  },
+};
+
+function NeutralState({ verifying, unsupported }: { verifying: boolean; unsupported: boolean }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f7f8] p-6 text-[#253238]">
+      <div className="w-full max-w-md rounded-3xl border border-[#dbe4e8] bg-white px-6 py-10 text-center shadow-sm">
+        {verifying ? (
+          <Loader2 className="mx-auto mb-4 size-8 animate-spin text-[#087f78]" aria-hidden="true" />
+        ) : (
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-[#e6f4f2] text-[#087f78]">
+            !
+          </div>
+        )}
+        <h1 className="text-xl font-bold">
+          {verifying ? "Loading secure payment details" : "Payment branding unavailable"}
+        </h1>
+        <p className="mt-2 text-sm text-[#4b5b63]">
+          {verifying
+            ? "Please wait while we verify this payment link."
+            : unsupported
+              ? "This payment domain is not configured. No brand identity has been applied."
+              : "We could not verify the details for this payment. Please contact support."}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function PaymentResult({ variant }: { variant: "success" | "cancel" }) {
   const [params] = useSearchParams();
-  const success = variant === "success";
-  const paid = params.get("amount") ? money(params.get("amount"), params.get("currency") ?? undefined) : null;
   const invoiceId = params.get("invoice");
-  const { data } = usePublicInvoiceQuery(invoiceId || "", { skip: !invoiceId });
-  const brand = data?.data?.brand;
-  const businessName = brand?.businessName || brand?.name;
-  const accent = brandColor(brand?.color || params.get("color"));
-  const footerText = brand?.pdfFooter?.trim() || (businessName ? `Thank you for your business. ${businessName}` : "");
-  const pdfHref = invoiceId ? `/api/payments/public/${invoiceId}/pdf` : null;
+  const [polls, setPolls] = useState(0);
+
+  // Identity comes from the real payment hostname, never the portal default or
+  // a manually selected brand value stored in localStorage/query params.
+  const brandQuery = usePaymentBrandIdentityQuery();
+
+  // Keep polling briefly after a redirect: Square webhooks may confirm the
+  // payment a moment after the browser returns from checkout.
+  const invoiceQuery = usePublicInvoiceQuery(invoiceId || "", {
+    skip: !invoiceId,
+    pollingInterval: variant === "success" && polls < 10 ? 3000 : 0,
+  });
+
+  const paymentState = invoiceQuery.data?.data?.paymentState;
+  useEffect(() => {
+    if (variant !== "success") return;
+    if (!paymentState || paymentState === "COMPLETED" || paymentState === "CANCELLED" || paymentState === "OVERDUE") return;
+    setPolls((count) => Math.min(count + 1, 10));
+  }, [paymentState, variant]);
+
+  const brand = brandQuery.data?.data;
+  const invoice = invoiceQuery.data?.data;
+
+  // Refuse to mix identities: the invoice's originating brand must match the
+  // brand detected from the domain it was opened on.
+  const brandMismatch = Boolean(brand && invoice?.brand?.id && invoice.brand.id !== brand.id);
+
+  const brandLoading = brandQuery.isLoading;
+  const invoiceLoading = Boolean(invoiceId) && invoiceQuery.isLoading;
+  const verifying = variant === "success" && Boolean(invoiceId) && paymentState !== "COMPLETED" && polls < 10;
+
+  if (brandLoading || invoiceLoading) return <NeutralState verifying unsupported={false} />;
+  if (!brand || brandMismatch || (invoiceId && invoiceQuery.isError)) {
+    return <NeutralState verifying={false} unsupported={!brand || brandMismatch} />;
+  }
+
   return (
-    <div
-      className="relative flex min-h-screen items-center justify-center overflow-hidden p-4"
-      style={{ background: `linear-gradient(135deg, ${shade(accent, 0.97)} 0%, ${shade(accent, 0.9)} 50%, ${shade(accent, 0.82)} 100%)` }}
-    >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `radial-gradient(ellipse_at_top_right,${rgba(accent, 0.4)},transparent 55%),radial-gradient(ellipse_at_bottom_left,${rgba(accent, 0.18)},transparent 55%)`,
-        }}
-      />
-      <Card
-        className="relative w-full max-w-md border bg-white/95 text-center text-neutral-900 backdrop-blur-xl"
-        style={{ borderColor: rgba(accent, 0.55), boxShadow: `0 24px 60px -24px ${rgba(accent, 0.5)}` }}
-      >
-        <CardContent>
-          <div className="mb-4 flex justify-center">
-            <div
-              className="flex size-20 items-center justify-center overflow-hidden rounded-2xl"
-              style={{
-                background: `linear-gradient(180deg, ${shade(accent, 0.5)}, ${accent})`,
-                boxShadow: `inset 0 1px 0 ${rgba("#ffffff", 0.8)}`,
-                border: `1px solid ${shade(accent, -0.15)}`,
-              }}
-            >
-              <Logo src={brand?.logoUrl} alt={businessName} className="size-16" />
-            </div>
-          </div>
-          {businessName && <p className="mb-3 text-sm font-semibold text-neutral-800">{businessName}</p>}
-          <div
-            className={`mx-auto mb-4 flex size-16 items-center justify-center rounded-full ${success ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500"}`}
-          >
-            {success ? <CheckCircle2 className="size-8" /> : <XCircle className="size-8" />}
-          </div>
-          <h1 className="text-xl font-bold text-neutral-900">{success ? "Payment successful" : "Payment cancelled"}</h1>
-          {paid && success && (
-            <p className="mt-2 text-2xl font-extrabold text-emerald-600">{paid}</p>
-          )}
-          <p className="mt-2 text-sm text-neutral-600">
-            {success
-              ? "Thank you! Your payment has been received. A receipt is on its way to your email."
-              : "You cancelled the payment. No charge was made. You can try again at any time."}
-          </p>
-          {footerText && <p className="mt-3 whitespace-pre-line text-xs text-neutral-500">{footerText}</p>}
-          {success && pdfHref && (
-            <a
-              href={pdfHref}
-              className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border bg-white px-4 text-sm font-bold text-neutral-800 transition-colors hover:brightness-[0.99]"
-              style={{ borderColor: rgba(accent, 0.5), background: shade(accent, 0.85) }}
-            >
-              <Download className="size-4" style={{ color: shade(accent, -0.4) }} /> Download Invoice PDF
-            </a>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <PaymentSuccessScreen
+      variant={variant}
+      brand={brand}
+      invoice={invoice || null}
+      verifying={verifying}
+      pdfHref={invoiceId ? `/api/payments/public/${invoiceId}/pdf` : null}
+    />
   );
 }
