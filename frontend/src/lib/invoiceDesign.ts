@@ -271,3 +271,65 @@ export function suggestColors(palette: string[]): InvoiceDesignColors {
 export function designFromPalette(palette: string[], layout: InvoiceLayout = "modern"): InvoiceDesign {
   return { layout, colors: suggestColors(palette) };
 }
+
+/* ------------------------------------------------------------------ */
+/* Readable colour shuffling                                           */
+/* ------------------------------------------------------------------ */
+
+function validColors(palette: string[]): string[] {
+  const seen = new Set<string>();
+  return palette
+    .map((c) => hex(c, ""))
+    .filter((c) => {
+      if (!c || seen.has(c)) return false;
+      seen.add(c);
+      return true;
+    });
+}
+
+/** Always give the four roles a distinct colour, even for a tiny palette. */
+function paletteVariants(palette: string[]): string[] {
+  const base = validColors(palette);
+  if (!base.length) return [DEFAULT_INVOICE_DESIGN.colors.primary, DEFAULT_INVOICE_DESIGN.colors.secondary, DEFAULT_INVOICE_DESIGN.colors.accent, DEFAULT_INVOICE_DESIGN.colors.supporting];
+  const variants = [...base];
+  const root = base[0];
+  for (const amount of [-0.28, 0.28, 0.55, -0.5, 0.75]) {
+    if (variants.length >= 12) break;
+    const next = tint(root, amount);
+    if (!variants.includes(next)) variants.push(next);
+  }
+  return variants;
+}
+
+function darkEnough(color: string, maxLuminance: number): string {
+  let result = color;
+  for (let i = 0; i < 10 && luminance(result) > maxLuminance; i += 1) result = tint(result, -0.12);
+  return result;
+}
+
+function lightEnough(color: string, minLuminance: number): string {
+  let result = color;
+  for (let i = 0; i < 10 && luminance(result) < minLuminance; i += 1) result = tint(result, 0.16);
+  return result;
+}
+
+/**
+ * Rotate the logo colours through the four roles. Every shuffle is different,
+ * while dark roles stay readable against white and soft panels stay light, so
+ * invoice text never disappears or ends up on a jarring tone.
+ */
+export function shuffleColors(palette: string[], step = 1): InvoiceDesignColors {
+  const colors = paletteVariants(palette);
+  const offset = ((step % colors.length) + colors.length) % colors.length;
+  const pick = (i: number) => colors[(offset + i) % colors.length];
+  return {
+    // Dark band / ink: white text must stay legible on corporate headers.
+    primary: darkEnough(pick(0), 0.34),
+    // Headings and labels printed on white.
+    secondary: darkEnough(pick(1), 0.42),
+    // Highlights and small coloured text on white.
+    accent: darkEnough(pick(2), 0.5),
+    // Background panel: never dark enough to swallow ink.
+    supporting: lightEnough(pick(3), 0.74),
+  };
+}

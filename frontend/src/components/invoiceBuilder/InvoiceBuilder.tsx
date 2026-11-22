@@ -899,7 +899,7 @@ export default function InvoiceBuilder() {
                 <Group title="Design & branding" description="Colours come from the selected brand. The same design is used by the preview, PDF and client page.">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <p className="max-w-xl text-xs text-muted-foreground">
-                      One consistent document style. Adjust the brand colours here if needed; layout templates are intentionally hidden.
+                      One consistent document style. Pick a layout, then shuffle the logo colours until the preview reads clearly — the same design applies to the PDF and client page.
                     </p>
                     <Button
                       type="button"
@@ -920,7 +920,6 @@ export default function InvoiceBuilder() {
                       savedDesign={brandDesign}
                       onReset={() => { setDesignOverride(null); setDesignTouched(true); setDirty(true); }}
                       hidePreview
-                      hideLayout
                     />
                   </div>
                   <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">

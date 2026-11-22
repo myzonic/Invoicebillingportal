@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { RotateCcw, Shuffle, Sparkles, Undo2 } from "lucide-react";
 import type { InvoiceDesign, InvoiceDesignColors } from "@/types";
-import { COLOR_ROLES, INVOICE_LAYOUTS, LAYOUT_LABEL, readableOn, sameDesign, suggestColors } from "@/lib/invoiceDesign";
+import { COLOR_ROLES, INVOICE_LAYOUTS, LAYOUT_LABEL, readableOn, sameDesign, shuffleColors, suggestColors } from "@/lib/invoiceDesign";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { InvoiceDesignPreview, InvoiceLayoutThumb, type PreviewItem } from "./InvoiceDesignPreview";
@@ -56,6 +56,7 @@ export function InvoiceDesignEditor({
   hideLayout,
 }: InvoiceDesignEditorProps) {
   const [openRole, setOpenRole] = useState<keyof InvoiceDesignColors | null>(null);
+  const [shuffleStep, setShuffleStep] = useState(0);
   const dirty = Boolean(savedDesign) && !sameDesign(value, savedDesign);
 
   const setColor = (role: keyof InvoiceDesignColors, color: string) =>
@@ -63,7 +64,14 @@ export function InvoiceDesignEditor({
 
   const autoAssign = () => {
     if (!palette.length) return;
+    setShuffleStep(0);
     onChange({ ...value, colors: suggestColors(palette) });
+  };
+
+  const shuffle = () => {
+    if (!palette.length) return;
+    setShuffleStep((step) => step + 1);
+    onChange({ ...value, colors: shuffleColors(palette, shuffleStep + 1) });
   };
 
   return (
@@ -118,9 +126,14 @@ export function InvoiceDesignEditor({
           </div>
           <div className="flex items-center gap-2">
             {palette.length > 0 && (
-              <Button type="button" variant="ghost" size="sm" onClick={autoAssign} title="Assign the strongest logo colours automatically">
-                <Sparkles className="size-3.5" /> Auto-assign
-              </Button>
+              <>
+                <Button type="button" variant="ghost" size="sm" onClick={autoAssign} title="Assign the strongest logo colours automatically">
+                  <Sparkles className="size-3.5" /> Auto-assign
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={shuffle} title="Try another readable colour combination from the logo">
+                  <Shuffle className="size-3.5" /> Shuffle
+                </Button>
+              </>
             )}
             {onExtract && (
               <Button type="button" variant="outline" size="sm" onClick={onExtract} loading={extracting}>
