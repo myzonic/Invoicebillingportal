@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Pencil, Send, Copy, ExternalLink, CheckCircle2, Trash2, Download, FilePenLine, Plus, RefreshCw } from "lucide-react";
@@ -20,13 +20,12 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Table, TBody, TD, TH, THead, TR, Spinner, EmptyState } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Dialog } from "@/components/ui/dialog";
+import { PdfFrame } from "@/components/PdfFrame";
 import { Input } from "@/components/ui/input";
 import { Field, Textarea } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { RichTextEditor } from "@/components/ui/richText";
 import type { InvoiceItem } from "@/types";
-
-const PdfFrame = lazy(() => import("@/components/PdfFrame").then((m) => ({ default: m.PdfFrame })));
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
@@ -491,13 +490,7 @@ export default function InvoiceDetail() {
               </Button>
             </div>
           </div>
-          <div>
-            {editPreviewUrl ? (
-              <Suspense fallback={<div className="flex h-[70vh] items-center justify-center"><Spinner /></div>}>
-                <PdfFrame src={editPreviewUrl} />
-              </Suspense>
-            ) : <Spinner />}
-          </div>
+          <div>{editPreviewUrl ? <PdfFrame src={editPreviewUrl} /> : <Spinner />}</div>
         </div>
       </Dialog>
 

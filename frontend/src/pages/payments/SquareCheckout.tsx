@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, CreditCard, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -13,10 +13,6 @@ import { Spinner, EmptyState } from "@/components/ui/table";
 import Logo from "@/components/Logo";
 import type { SquareCard } from "@/types/square";
 import { branding } from "@/config/branding";
-
-// The PDF engine is ~9 MB (worker + wasm). Load it only when the invoice panel
-// mounts so the checkout form itself stays fast, especially on mobile.
-const PdfFrame = lazy(() => import("@/components/PdfFrame").then((m) => ({ default: m.PdfFrame })));
 
 interface CheckoutConfig {
   applicationId: string;
@@ -238,17 +234,155 @@ export default function SquareCheckout() {
       />
 
       <div className="relative mx-auto grid w-full max-w-[1250px] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
-        {/* Left: the actual invoice PDF, rendered with EmbedPDF */}
+        {/* Left: PDF-style invoice */}
         <Card
-          className="overflow-hidden border bg-white"
+          className="overflow-hidden border bg-white text-neutral-900"
           style={{ borderColor: line, boxShadow: `0 24px 60px -24px ${rgba(primary, 0.35)}` }}
         >
-          <Suspense fallback={<div className="flex h-[75vh] items-center justify-center"><Spinner /></div>}>
-            <PdfFrame
-              src={`/api/payments/public/${id}/pdf`}
-              className="h-[75vh] min-h-[520px] rounded-none border-0 bg-white"
-            />
-          </Suspense>
+          <div
+            className="flex flex-wrap items-start justify-between gap-4 px-6 py-5 sm:px-10"
+            style={{
+              background: headerDark ? primary : "transparent",
+              borderTop: headerDark ? `3px solid ${accent}` : `4px solid ${primary}`,
+              borderBottom: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
+            }}
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <Logo
+                src={brand?.logoUrl}
+                alt={brandName}
+                className="h-auto max-h-[70px] w-auto max-w-[200px] shrink-0 object-contain"
+              />
+              <div className="min-w-0">
+                <div className="truncate text-xl font-bold tracking-tight" style={{ color: headerText }}>
+                  {brandName}
+                </div>
+                <div className="mt-1 text-xs" style={{ color: headerMuted }}>{brand?.address || company.address}</div>
+                <div className="text-xs" style={{ color: headerMuted }}>
+                  {[brand?.email || company.email, brand?.phone || company.phone].filter(Boolean).join("  |  ")}
+                </div>
+                {headerLines.length > 0 && (
+                  <div className="mt-1 whitespace-pre-line text-xs" style={{ color: headerTitle }}>
+                    {headerLines.join("\n")}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold uppercase tracking-tight" style={{ color: headerTitle }}>
+                Invoice
+              </div>
+              <div className="mt-1 text-sm font-medium" style={{ color: headerMuted }}># {inv.number}</div>
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-10">
+            <div className="grid grid-cols-2 gap-6 text-sm">
+              <div>
+                <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: secondary }}>Bill to</div>
+                <div className="font-semibold" style={{ color: ink }}>{inv.client?.name}</div>
+                {inv.client?.email && <div className="mt-0.5" style={{ color: muted }}>{inv.client.email}</div>}
+                {inv.client?.phone && <div style={{ color: muted }}>{inv.client.phone}</div>}
+                {inv.client?.address && <div className="mt-0.5 whitespace-pre-line" style={{ color: muted }}>{inv.client.address}</div>}
+              </div>
+              <div className="space-y-1.5 text-right">
+                <div className="flex justify-end gap-2">
+                  <span style={{ color: muted }}>Issue date:</span>
+                  <span className="font-medium" style={{ color: ink }}>{formatDate(inv.issueDate)}</span>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <span style={{ color: muted }}>Due date:</span>
+                  <span className="font-medium" style={{ color: ink }}>{formatDate(inv.dueDate)}</span>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <span style={{ color: muted }}>Status:</span>
+                  <span className="font-medium" style={{ color: secondary }}>{statusLabel(inv.status)}</span>
+                </div>
+              </div>
+            </div>
+
+            <table className="mt-8 w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[46%]" />
+                <col className="w-[12%]" />
+                <col className="w-[21%]" />
+                <col className="w-[21%]" />
+              </colgroup>
+              <thead>
+                <tr
+                  className="border-y text-[11px] uppercase tracking-wide"
+                  style={{ borderColor: line, background: tableHeaderFill, color: secondary }}
+                >
+                  <th className="py-2.5 pl-0 pr-3 text-left font-bold">Description</th>
+                  <th className="py-2.5 px-3 text-right font-bold">Qty</th>
+                  <th className="py-2.5 px-3 text-right font-bold">Unit Price</th>
+                  <th className="py-2.5 pr-0 pl-3 text-right font-bold">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, i) => (
+                  <tr key={i} className="border-b" style={{ borderColor: line, background: t && !t.minimal && i % 2 === 1 ? t.softFill : "transparent" }}>
+                    <td className="py-2.5 pl-0 pr-3 align-top" style={{ color: ink }}>
+                      <span className="richtext" dangerouslySetInnerHTML={{ __html: richText(item.description) }} />
+                    </td>
+                    <td className="py-2.5 px-3 text-right align-top" style={{ color: ink }}>{item.quantity}</td>
+                    <td className="py-2.5 px-3 text-right align-top" style={{ color: ink }}>{money(item.unitPrice, inv.currency)}</td>
+                    <td className="py-2.5 pl-3 pr-0 text-right font-medium align-top" style={{ color: ink }}>{money(itemNet(item), inv.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="mt-6 flex flex-col items-end gap-1.5 text-sm">
+              <div className="flex w-64 justify-between">
+                <span style={{ color: muted }}>Subtotal</span>
+                <span style={{ color: ink }}>{money(inv.subtotal, inv.currency)}</span>
+              </div>
+              <div className="flex w-64 justify-between">
+                <span style={{ color: muted }}>Tax ({inv.taxRate}%)</span>
+                <span style={{ color: ink }}>{money(inv.taxAmount, inv.currency)}</span>
+              </div>
+              {discountTotal > 0 && (
+                <div className="flex w-64 justify-between">
+                  <span style={{ color: muted }}>Discount</span>
+                  <span style={{ color: ink }}>-{money(discountTotal, inv.currency)}</span>
+                </div>
+              )}
+              {Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping || 0) > 0 && (
+                <div className="flex w-64 justify-between">
+                  <span style={{ color: muted }}>Shipping</span>
+                  <span style={{ color: ink }}>{money(Number((inv as { builderData?: { shipping?: number } }).builderData?.shipping), inv.currency)}</span>
+                </div>
+              )}
+              <div
+                className="flex w-64 items-center justify-between px-3 py-2 text-base font-bold"
+                style={{
+                  background: t ? (t.headerDark ? primary : mixHex(accent, "#ffffff", 0.86)) : "#f9fafb",
+                  color: t && t.headerDark ? "#ffffff" : (t ? primary : ink),
+                }}
+              >
+                <span>TOTAL</span>
+                <span>{money(inv.total, inv.currency)}</span>
+              </div>
+            </div>
+
+            {inv.notes && <p className="mt-6 text-sm" style={{ color: muted }}>Notes: {inv.notes}</p>}
+          </div>
+
+          <div
+            className="px-6 py-4 sm:px-10"
+            style={{
+              background: headerDark ? primary : "#ffffff",
+              borderTop: headerDark ? `3px solid ${secondary}` : `1px solid ${line}`,
+            }}
+          >
+            <p className="whitespace-pre-line text-sm" style={{ color: headerMuted }}>{footerText}</p>
+            {footerContact && (
+              <p className="mt-1 text-xs" style={{ color: headerTitle }}>
+                {footerContact}
+              </p>
+            )}
+          </div>
         </Card>
 
         {/* Right: card entry */}

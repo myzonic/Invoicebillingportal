@@ -1,4 +1,4 @@
-import { FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -52,10 +52,9 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/table";
 import AssetImage from "@/components/AssetImage";
 import { RichTextEditor } from "@/components/ui/richText";
+import { PdfFrame } from "@/components/PdfFrame";
 import { InvoiceDesignEditor } from "@/components/invoiceDesign/InvoiceDesignEditor";
 import { InvoiceDesignPreview, type EditablePreviewField, type InvoicePreviewEditor } from "@/components/invoiceDesign/InvoiceDesignPreview";
-
-const PdfFrame = lazy(() => import("@/components/PdfFrame").then((m) => ({ default: m.PdfFrame })));
 
 const CURRENCIES = ["USD", "AUD", "EUR", "GBP", "CAD"];
 
@@ -571,9 +570,7 @@ export default function InvoiceBuilder() {
             <InvoiceDesignPreview {...previewProps} className="!shadow-none" />
           </div>
         ) : pdfUrl ? (
-          <Suspense fallback={<div className="flex h-[520px] items-center justify-center"><Spinner /></div>}>
-            <PdfFrame src={pdfUrl} className="h-[calc(100vh-14rem)] min-h-[520px] border-0 bg-transparent" />
-          </Suspense>
+          <PdfFrame src={pdfUrl} className="h-[calc(100vh-14rem)] min-h-[520px] border-0 bg-transparent" />
         ) : (
           <div className="flex h-[520px] items-center justify-center"><Spinner /></div>
         )}
@@ -956,11 +953,7 @@ export default function InvoiceBuilder() {
           <Button type="button" variant="outline" size="sm" className="absolute right-2 top-2 z-10" onClick={() => void pdfFrameRef.current?.requestFullscreen?.()}>
             <Maximize2 className="size-3.5" /> Full screen
           </Button>
-          {pdfUrl ? (
-            <Suspense fallback={<div className="flex h-[75vh] items-center justify-center"><Spinner /></div>}>
-              <PdfFrame src={pdfUrl} className="h-[75vh]" />
-            </Suspense>
-          ) : <Spinner />}
+          {pdfUrl ? <PdfFrame src={pdfUrl} className="h-[75vh]" /> : <Spinner />}
         </div>
       </Dialog>
 
