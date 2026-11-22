@@ -80,7 +80,6 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
   // Keep every readable choice inside the detected brand's own palette.
   const cardText = onSurface(colors.text, "#ffffff", colors.primary);
   const cardMuted = onSurface(colors.secondary, "#ffffff", colors.primary);
-  const emphasis = onSurface(colors.accent, "#ffffff", colors.primary);
   const statusInk = onSurface(statusColor, "#ffffff", colors.primary);
   const buttonInk = buttonText(colors.button, colors.primary);
 
@@ -155,7 +154,7 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
         ) : showSuccess ? (
           <>
             {confirmedAmount && (
-              <p className="mt-3 text-3xl font-extrabold" style={{ color: emphasis }}>
+              <p className="mt-3 text-3xl font-extrabold" style={{ color: cardText }}>
                 {confirmedAmount}
               </p>
             )}
