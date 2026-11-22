@@ -23,6 +23,13 @@ function configFor(currency: string): SquareConfig {
   };
 }
 
+/**
+ * Square Dashboard unit (location) where portal invoices are mirrored.
+ * This is the `currentUnitToken` from the Square Dashboard URL.
+ */
+const SQUARE_INVOICE_LOCATION_ID = "L3BV11T2WA32R";
+export const squareInvoiceLocationId = SQUARE_INVOICE_LOCATION_ID;
+
 async function squareFetch(path: string, init?: RequestInit, accessToken?: string) {
   const res = await fetch(`${SQUARE_API}${path}`, {
     ...init,
@@ -195,6 +202,136 @@ export async function chargeInvoiceWithToken(
   const payment = (result.payment as SquarePayment) || {};
   if (!payment.id) throw new Error("Square did not return a payment");
   return payment;
+}
+
+interface SquareCustomerResult { id?: string }
+interface SquareOrderResult { id?: string }
+interface SquareInvoiceResult { id?: string }
+
+type SyncClient = {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  squareCustomerId?: string | null;
+};
+
+type SyncInvoice = Pick<Invoice, "id" | "number" | "total" | "currency" | "dueDate"> & {
+  client?: SyncClient | null;
+};
+
+function dueDateString(value: Date | null): string | undefined {
+  return value ? value.toISOString().slice(0, 10) : undefined;
+}
+
+/** Reuses a stored Square customer, otherwise finds/creates one by email. */
+async function ensureSquareCustomer(client: SyncClient, accessToken: string): Promise<string> {
+  if (client.squareCustomerId) return client.squareCustomerId;
+
+  const email = client.email?.trim();
+  if (!email) throw new Error(`Client ${client.name} needs an email to create a Square invoice`);
+
+  const search = await squareFetch("/v2/customers/search", {
+    method: "POST",
+    body: JSON.stringify({
+      limit: 1,
+      query: { filter: { email_address: { exact: email } } },
+    }),
+  }, accessToken);
+  const existingId = (search.customers as SquareCustomerResult[] | undefined)?.[0]?.id;
+  if (existingId) {
+    await prisma.client.update({ where: { id: client.id }, data: { squareCustomerId: existingId } });
+    return existingId;
+  }
+
+  const names = client.name.trim().split(/\s+/).filter(Boolean);
+  const created = await squareFetch("/v2/customers", {
+    method: "POST",
+    body: JSON.stringify({
+      given_name: names.shift() || client.name || "Customer",
+      family_name: names.join(" ") || undefined,
+      email_address: email,
+      phone_number: client.phone?.trim() || undefined,
+      reference_id: client.id,
+    }),
+  }, accessToken);
+  const customerId = (created.customer as SquareCustomerResult | undefined)?.id;
+  if (!customerId) throw new Error("Square did not return a customer id");
+  await prisma.client.update({ where: { id: client.id }, data: { squareCustomerId: customerId } });
+  return customerId;
+}
+
+/**
+ * Creates a DRAFT invoice in the configured Square Dashboard as soon as a
+ * portal invoice is created. It is never published here: nothing is emailed or
+ * charged from Square until it is reviewed and published in the Dashboard.
+ */
+export async function syncInvoiceToSquare(invoice: SyncInvoice): Promise<string | null> {
+  const client = invoice.client;
+  if (!client) return null;
+
+  const cfg = configFor(env.square.defaultCurrency);
+  const chargeCurrency = env.square.defaultCurrency.toUpperCase();
+  const invoiceCurrency = invoice.currency.toUpperCase();
+  const conversion = invoiceCurrency === chargeCurrency
+    ? null
+    : await convertToUsd(Number(invoice.total), invoiceCurrency);
+  const chargeAmount = conversion ? conversion.amount : Number(invoice.total);
+
+  const customerId = await ensureSquareCustomer(client, cfg.accessToken);
+
+  const orderResult = await squareFetch("/v2/orders", {
+    method: "POST",
+    body: JSON.stringify({
+      idempotency_key: `portal-order-${invoice.id}`,
+      order: {
+        location_id: SQUARE_INVOICE_LOCATION_ID,
+        reference_id: `portal-invoice-${invoice.id}`,
+        line_items: [
+          {
+            name: `Invoice ${invoice.number}`,
+            quantity: "1",
+            base_price_money: { amount: cents(chargeAmount), currency: chargeCurrency },
+          },
+        ],
+      },
+    }),
+  }, cfg.accessToken);
+  const orderId = (orderResult.order as SquareOrderResult | undefined)?.id;
+  if (!orderId) throw new Error("Square did not return an order id");
+
+  const invoiceResult = await squareFetch("/v2/invoices", {
+    method: "POST",
+    body: JSON.stringify({
+      idempotency_key: `portal-invoice-${invoice.id}`,
+      invoice: {
+        location_id: SQUARE_INVOICE_LOCATION_ID,
+        order_id: orderId,
+        primary_recipient: { customer_id: customerId },
+        invoice_number: invoice.number,
+        title: `Invoice ${invoice.number}`,
+        description: conversion
+          ? `Portal invoice ${invoice.number} — ${Number(invoice.total).toFixed(2)} ${invoice.currency}, converted to ${chargeCurrency} at ${conversion.rate}.`
+          : "Created automatically from the billing portal.",
+        payment_requests: [
+          {
+            request_type: "BALANCE",
+            due_date: dueDateString(invoice.dueDate),
+            tipping_enabled: false,
+            automatic_payment_source: "NONE",
+          },
+        ],
+      },
+    }),
+  }, cfg.accessToken);
+  const squareInvoiceId = (invoiceResult.invoice as SquareInvoiceResult | undefined)?.id;
+  if (!squareInvoiceId) throw new Error("Square did not return an invoice id");
+
+  await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { squareInvoiceId },
+  });
+  return squareInvoiceId;
 }
 
 /** The public URL Square POSTs event notifications to (part of the signature). */

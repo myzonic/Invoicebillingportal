@@ -20,6 +20,7 @@ import {
 } from "../../services/invoiceStatus";
 import { sendInvoiceEmail } from "../../services/email";
 import { invoicePermalink, withPermalink } from "../../services/permalink";
+import { syncInvoiceToSquare } from "../../services/square";
 import { env } from "../../config/env";
 
 const router = Router();
@@ -582,15 +583,34 @@ router.post(
     }
     if (!invoice) throw new ApiError(409, "Could not allocate an invoice number, please retry");
 
+    // Mirror the new invoice into Square as a draft. A Square failure must not
+    // roll back the portal invoice, so report it in the response and the logs.
+    let squareSync: { invoiceId?: string; error?: string } = {};
+    try {
+      const squareInvoiceId = await syncInvoiceToSquare(invoice);
+      squareSync = squareInvoiceId ? { invoiceId: squareInvoiceId } : {};
+    } catch (err) {
+      squareSync = { error: err instanceof Error ? err.message : String(err) };
+      console.error(`[square] failed to mirror portal invoice ${invoice.number}:`, err);
+    }
+
+    const saved = squareSync.invoiceId
+      ? await prisma.invoice.findUnique({ where: { id: invoice.id }, include: { client: true, brand: true } })
+      : null;
+
     await audit({
       userId: req.user?.id,
       userEmail: req.user?.email,
       module: "invoices",
       action: LogAction.CREATE,
-      details: { id: invoice.id, number: invoice.number },
+      details: { id: invoice.id, number: invoice.number, squareInvoiceId: squareSync.invoiceId, squareError: squareSync.error },
       ip: req.ip,
     });
-    res.status(201).json({ success: true, data: withPermalink(invoice, invoice.brand) });
+    res.status(201).json({
+      success: true,
+      data: withPermalink(saved || invoice, (saved || invoice).brand),
+      squareSync,
+    });
   }),
 );
 

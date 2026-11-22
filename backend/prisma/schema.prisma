@@ -135,12 +135,14 @@ model Brand {
 }
 
 model Client {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  brandId   String?
+  id               String   @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  address          String?
+  // Square customer profile matched by email when an invoice is synced.
+  squareCustomerId String?
+  brandId          String?
   brand     Brand?   @relation(fields: [brandId], references: [id])
   notes     String?
   isActive  Boolean  @default(true)
@@ -196,6 +198,8 @@ model Invoice {
   sentAt          DateTime?
   paidAt          DateTime?
   squarePaymentLink String?
+  // Draft invoice created in the Square Dashboard for this portal invoice.
+  squareInvoiceId   String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
