@@ -35,14 +35,14 @@ services:
       CLIENT_URL: ${CLIENT_URL:-https://localhost}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
-      PORTAL_NAME: ${PORTAL_NAME:-Billing Portal}
+      PORTAL_NAME: ${PORTAL_NAME:-Crystal Reserve LLC}
       PORTAL_TAGLINE: ${PORTAL_TAGLINE:-Finance & Billing}
-      COMPANY_NAME: ${COMPANY_NAME:-Your Company}
+      COMPANY_NAME: ${COMPANY_NAME:-Crystal Reserve LLC}
       COMPANY_EMAIL: ${COMPANY_EMAIL:-billing@example.com}
       COMPANY_WEBSITE: ${COMPANY_WEBSITE:-https://example.com}
       PAYMENT_HOST: ${PAYMENT_HOST:-localhost}
       PUBLIC_LOGO_URL: ${PUBLIC_LOGO_URL:-}
-      DEFAULT_BRAND_NAME: ${DEFAULT_BRAND_NAME:-Your Company}
+      DEFAULT_BRAND_NAME: ${DEFAULT_BRAND_NAME:-Crystal Reserve LLC}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Portal Admin}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD}

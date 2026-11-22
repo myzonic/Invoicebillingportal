@@ -4,11 +4,13 @@ import crypto from "crypto";
 
 const prisma = new PrismaClient();
 
+const PORTAL_IDENTITY = "Crystal Reserve LLC";
+
 const seedConfig = {
   adminEmail: process.env.SEED_ADMIN_EMAIL || "admin@example.com",
   adminName: process.env.SEED_ADMIN_NAME || "Portal Admin",
-  defaultBrandName: process.env.DEFAULT_BRAND_NAME || process.env.COMPANY_NAME || "Your Company",
-  companyName: process.env.COMPANY_NAME || "Your Company",
+  defaultBrandName: PORTAL_IDENTITY,
+  companyName: PORTAL_IDENTITY,
   companyEmail: process.env.COMPANY_EMAIL || "billing@example.com",
   companyWebsite: process.env.COMPANY_WEBSITE || "https://example.com",
 };

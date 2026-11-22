@@ -9,6 +9,9 @@ function required(name: string, fallback?: string): string {
   return v;
 }
 
+/** Portal identity is fixed in code so stale runtime env cannot replace it. */
+const PORTAL_IDENTITY = "Crystal Reserve LLC";
+
 const squareAppId = process.env.SQUARE_APP_ID || "";
 const squareEnvironment = (process.env.SQUARE_ENVIRONMENT || "sandbox") as "sandbox" | "production";
 
@@ -53,15 +56,15 @@ export const env = {
   inviteToken: required("INVITE_TOKEN", process.env.NODE_ENV === "production" ? undefined : "dev-invite-token"),
 
   branding: {
-    portalName: process.env.PORTAL_NAME || "Billing Portal",
+    portalName: PORTAL_IDENTITY,
     portalTagline: process.env.PORTAL_TAGLINE || "Finance & Billing",
-    companyName: process.env.COMPANY_NAME || "Your Company",
+    companyName: PORTAL_IDENTITY,
     companyEmail: process.env.COMPANY_EMAIL || "billing@example.com",
     companyWebsite: process.env.COMPANY_WEBSITE || "https://example.com",
     paymentHost: process.env.PAYMENT_HOST || "",
     paymentUrl: (process.env.PAYMENT_URL || process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, ""),
     publicLogoUrl: process.env.PUBLIC_LOGO_URL || "",
-    defaultBrandName: process.env.DEFAULT_BRAND_NAME || process.env.COMPANY_NAME || "Your Company",
+    defaultBrandName: PORTAL_IDENTITY,
   },
 
   square: {
