@@ -219,20 +219,6 @@ export default function SquareCheckout() {
         background: `linear-gradient(135deg, ${tint(t?.supporting || accent, 0.96)} 0%, ${tint(t?.supporting || accent, 0.88)} 55%, ${tint(t?.accent || accent, 0.9)} 100%)`,
       }}
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `radial-gradient(ellipse_at_top_right,${rgba(accent, 0.4)},transparent 55%),radial-gradient(ellipse_at_bottom_left,${rgba(accent, 0.18)},transparent 55%)`,
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
-        style={{
-          backgroundImage: `linear-gradient(to_right,${rgba(accent, 0.08)} 1px,transparent 1px),linear-gradient(to_bottom,${rgba(accent, 0.08)} 1px,transparent 1px)`,
-          backgroundSize: "44px 44px",
-        }}
-      />
-
       <div className="relative mx-auto grid w-full max-w-[1250px] items-start gap-6 lg:grid-cols-[minmax(0,794px)_minmax(320px,380px)] lg:justify-center">
         {/* Left: premium client invoice */}
         <Card
