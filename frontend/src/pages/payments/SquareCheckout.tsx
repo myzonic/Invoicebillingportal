@@ -294,7 +294,7 @@ export default function SquareCheckout() {
             {/* ---------- Items ---------- */}
             <table className="mt-8 w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-[46%]" />
+                <col className="w-full sm:w-[46%]" />
                 <col className="w-[12%]" />
                 <col className="w-[21%]" />
                 <col className="w-[21%]" />
