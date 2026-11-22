@@ -108,7 +108,7 @@ The app generates and validates these hosts but **cannot provision DNS or certif
 
    (comma-separated; `*` is a wildcard). The brand-domain cache refreshes every 5 minutes and is invalidated immediately whenever a brand is created/updated/deleted.
 
-**Host → brand resolution:** `GET /api/payments/domain/:host` maps an incoming `pay.<domain>` host to its brand (used by the public pages), and `GET /api/payments/public/:token` returns only client-facing invoice data plus the brand identity and payment state.
+**Host → brand resolution:** `GET /api/payments/brand?host=<hostname>` is the central identity endpoint used by client-facing payment screens. It resolves the actual payment hostname to exactly one active brand and returns its logo plus primary/secondary/accent/background/text/button colors. Unknown hosts return 404 and receive no brand identity. `GET /api/payments/domain/:host` remains for backwards compatibility, and `GET /api/payments/public/:token` returns only client-facing invoice data plus the brand identity and payment state.
 
 ## PDF preview and editing
 

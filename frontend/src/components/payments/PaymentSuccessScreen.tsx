@@ -54,7 +54,7 @@ export default function PaymentSuccessScreen({ variant, brand, invoice, verifyin
   const paid = invoice?.paymentState === "COMPLETED" || invoice?.status === "PAID";
   const processing = invoice?.paymentState === "PROCESSING" || invoice?.pendingPayment === true;
   const showSuccess = variant === "success" && paid;
-  const showPending = variant === "success" && !paid && (verifying || processing || !invoice);
+  const showPending = variant === "success" && !paid && (verifying || processing);
   const confirmedAmount = paid && invoice ? money(invoice.total, invoice.currency || brand.currency) : null;
 
   const StatusIcon = showPending ? Loader2 : showSuccess ? CheckCircle2 : XCircle;

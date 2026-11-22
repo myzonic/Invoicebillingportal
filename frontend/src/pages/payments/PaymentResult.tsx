@@ -3,28 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { usePaymentBrandIdentityQuery, usePublicInvoiceQuery } from "@/app/apiSlice";
 import PaymentSuccessScreen from "@/components/payments/PaymentSuccessScreen";
-import type { PaymentBrandIdentity } from "@/types";
-
-/** Neutral, brand-free identity for unknown hosts or mismatched invoices. */
-const NEUTRAL_IDENTITY: PaymentBrandIdentity = {
-  id: "neutral",
-  name: "Secure Payment",
-  businessName: null,
-  logoUrl: null,
-  paymentDomain: "",
-  currency: "USD",
-  paymentEnabled: true,
-  pdfFooter: null,
-  colors: {
-    primary: "#253238",
-    secondary: "#4b5b63",
-    accent: "#087f78",
-    supporting: "#f4f7f8",
-    background: "#f4f7f8",
-    text: "#253238",
-    button: "#087f78",
-  },
-};
 
 function NeutralState({ verifying, unsupported }: { verifying: boolean; unsupported: boolean }) {
   return (
@@ -55,25 +33,26 @@ function NeutralState({ verifying, unsupported }: { verifying: boolean; unsuppor
 export default function PaymentResult({ variant }: { variant: "success" | "cancel" }) {
   const [params] = useSearchParams();
   const invoiceId = params.get("invoice");
-  const [polls, setPolls] = useState(0);
+  const [attempts, setAttempts] = useState(0);
 
   // Identity comes from the real payment hostname, never the portal default or
   // a manually selected brand value stored in localStorage/query params.
   const brandQuery = usePaymentBrandIdentityQuery();
 
   // Keep polling briefly after a redirect: Square webhooks may confirm the
-  // payment a moment after the browser returns from checkout.
+  // payment a moment after the browser returns from checkout. Each successful
+  // response advances the attempt counter, so an invoice with no payment state
+  // still stops polling instead of spinning forever.
   const invoiceQuery = usePublicInvoiceQuery(invoiceId || "", {
     skip: !invoiceId,
-    pollingInterval: variant === "success" && polls < 10 ? 3000 : 0,
+    pollingInterval: variant === "success" && attempts < 10 ? 3000 : 0,
   });
 
   const paymentState = invoiceQuery.data?.data?.paymentState;
   useEffect(() => {
-    if (variant !== "success") return;
-    if (!paymentState || paymentState === "COMPLETED" || paymentState === "CANCELLED" || paymentState === "OVERDUE") return;
-    setPolls((count) => Math.min(count + 1, 10));
-  }, [paymentState, variant]);
+    if (variant !== "success" || !invoiceQuery.fulfilledTimeStamp) return;
+    setAttempts((count) => Math.min(count + 1, 10));
+  }, [invoiceQuery.fulfilledTimeStamp, variant]);
 
   const brand = brandQuery.data?.data;
   const invoice = invoiceQuery.data?.data;
@@ -84,8 +63,9 @@ export default function PaymentResult({ variant }: { variant: "success" | "cance
 
   const brandLoading = brandQuery.isLoading;
   const invoiceLoading = Boolean(invoiceId) && invoiceQuery.isLoading;
-  const verifying = variant === "success" && Boolean(invoiceId) && paymentState !== "COMPLETED" && polls < 10;
+  const verifying = variant === "success" && Boolean(invoiceId) && paymentState !== "COMPLETED" && attempts < 10;
 
+  if (variant === "success" && !invoiceId) return <NeutralState verifying={false} unsupported={false} />;
   if (brandLoading || invoiceLoading) return <NeutralState verifying unsupported={false} />;
   if (!brand || brandMismatch || (invoiceId && invoiceQuery.isError)) {
     return <NeutralState verifying={false} unsupported={!brand || brandMismatch} />;
