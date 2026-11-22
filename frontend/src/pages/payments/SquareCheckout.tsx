@@ -467,7 +467,7 @@ export default function SquareCheckout() {
                         <input
                           type="text"
                           autoComplete="cc-name"
-                          placeholder="Name on card"
+                          placeholder="Your name as it appears on the card"
                           value={billing.name}
                           onChange={(e) => setB("name", e.target.value)}
                           className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-900 placeholder:text-neutral-400"
